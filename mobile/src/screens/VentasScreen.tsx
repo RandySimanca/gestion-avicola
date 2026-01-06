@@ -83,6 +83,39 @@ export default function VentasScreen({ navigation }: Props) {
         }
     };
 
+    const handleQuickPay = (venta: any) => {
+        const saldoPendiente = venta.total - (venta.abono || 0);
+        Alert.alert(
+            'Confirmar Pago Completo',
+            `¿Desea registrar el pago del saldo pendiente por $${saldoPendiente.toLocaleString('es-CO')}?`,
+            [
+                {
+                    text: 'Cancelar',
+                    style: 'cancel'
+                },
+                {
+                    text: 'Pagar Todo',
+                    onPress: async () => {
+                        setLoading(true);
+                        try {
+                            const response = await apiService.updateVenta(venta.id, { abono: venta.total });
+                            if (response.success) {
+                                Alert.alert('Éxito', 'Venta pagada correctamente');
+                                loadVentas();
+                            } else {
+                                Alert.alert('Error', response.error || 'No se pudo registrar el pago');
+                            }
+                        } catch (error: any) {
+                            Alert.alert('Error', error.message || 'Error al registrar el pago');
+                        } finally {
+                            setLoading(false);
+                        }
+                    }
+                }
+            ]
+        );
+    };
+
     const handleEdit = (item: any) => {
         navigation.navigate('EditarVenta', { venta: item });
     };
@@ -154,6 +187,12 @@ export default function VentasScreen({ navigation }: Props) {
                 ) : null}
 
                 <View style={styles.cardActions}>
+                    {item.forma_pago === 'CREDITO' && (item.total - (item.abono || 0)) > 0 && (
+                        <TouchableOpacity onPress={() => handleQuickPay(item)} style={styles.actionButton}>
+                            <Ionicons name="cash-outline" size={22} color="#f39c12" />
+                            <Text style={[styles.actionText, { color: '#f39c12' }]}>Pagar Todo</Text>
+                        </TouchableOpacity>
+                    )}
                     <TouchableOpacity onPress={() => handleInvoice(item)} style={styles.actionButton}>
                         <Ionicons name="document-text-outline" size={22} color="#27ae60" />
                         <Text style={[styles.actionText, { color: '#27ae60' }]}>Factura</Text>

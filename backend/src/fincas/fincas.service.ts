@@ -7,7 +7,10 @@ export class FincasService {
   constructor(private firebaseService: FirebaseService) {}
 
   async create(createFincaDto: CreateFincaDto) {
-    const docRef = await this.firebaseService.getFirestore().collection('FINCA').add(createFincaDto);
+    const docRef = await this.firebaseService.getFirestore().collection('FINCA').add({
+      ...createFincaDto,
+      createdAt: new Date(),
+    });
     return { id: docRef.id, ...createFincaDto };
   }
 

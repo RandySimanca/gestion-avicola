@@ -7,12 +7,23 @@ export class GalponesService {
   constructor(private firebaseService: FirebaseService) {}
 
   async create(createGalponDto: CreateGalponDto) {
-    const docRef = await this.firebaseService.getFirestore().collection('GALPON').add(createGalponDto);
+    const docRef = await this.firebaseService.getFirestore().collection('GALPON').add({
+      ...createGalponDto,
+      createdAt: new Date(),
+    });
     return { id: docRef.id, ...createGalponDto };
   }
 
   async findAll() {
     const snapshot = await this.firebaseService.getFirestore().collection('GALPON').get();
+    return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+  }
+
+  async findByFinca(fincaId: string) {
+    const snapshot = await this.firebaseService.getFirestore()
+      .collection('GALPON')
+      .where('finca_id', '==', fincaId)
+      .get();
     return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
   }
 

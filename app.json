@@ -1,0 +1,12 @@
+{
+  "expo": {
+    "extra": {
+      "eas": {
+        "projectId": "e80cc062-877c-483f-898f-e807a1099203"
+      }
+    },
+    "android": {
+      "package": "com.randysimanca.gestionavicola"
+    }
+  }
+}

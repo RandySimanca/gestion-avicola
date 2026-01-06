@@ -1,7 +1,3 @@
-<script setup lang="ts">
-import { RouterLink } from 'vue-router'
-</script>
-
 <template>
     <aside class="sidebar">
         <div class="logo">
@@ -12,9 +8,23 @@ import { RouterLink } from 'vue-router'
             <RouterLink to="/fincas">Fincas</RouterLink>
             <RouterLink to="/galpones">Galpones</RouterLink>
             <RouterLink to="/lotes">Lotes</RouterLink>
+            <RouterLink to="/registroDiario">Registro Diario</RouterLink>
+            <RouterLink v-if="isAdmin" to="/admin/usuarios">Administrar Usuarios</RouterLink>
         </nav>
     </aside>
 </template>
+
+<script setup lang="ts">
+import { RouterLink } from 'vue-router'
+import { computed } from 'vue'
+import apiService from '../../services/api.service'
+
+const isAdmin = computed(() => {
+    const role = apiService.getUserRole()
+    console.log('Current User Role:', role)
+    return role === 'ADMIN'
+})
+</script>
 
 <style scoped>
 .sidebar {

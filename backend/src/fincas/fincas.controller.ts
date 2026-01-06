@@ -11,13 +11,13 @@ export class FincasController {
   constructor(private readonly fincasService: FincasService) {}
 
   @Post()
-  @Roles('ADMIN')
+  @Roles('ADMIN', 'GERENTE', 'GALPONERO')
   create(@Body() createFincaDto: CreateFincaDto) {
     return this.fincasService.create(createFincaDto);
   }
 
   @Get()
-  @Roles('ADMIN', 'GERENTE')
+  @Roles('ADMIN', 'GERENTE', 'GALPONERO')
   findAll() {
     return this.fincasService.findAll();
   }
@@ -35,7 +35,7 @@ export class FincasController {
   }
 
   @Delete(':id')
-  @Roles('ADMIN')
+  @Roles('ADMIN', 'GERENTE', 'GALPONERO')
   remove(@Param('id') id: string) {
     return this.fincasService.remove(id);
   }

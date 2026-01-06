@@ -1,0 +1,13 @@
+export enum UserRole {
+  ADMIN = 'ADMIN',
+  GERENTE = 'GERENTE',
+  GALPONERO = 'GALPONERO',
+  CONTADOR = 'CONTADOR',
+}
+
+export enum UserStatus {
+  PENDIENTE = 'PENDIENTE',
+  ACTIVO = 'ACTIVO',
+  RECHAZADO = 'RECHAZADO',
+  INACTIVO = 'INACTIVO',
+}

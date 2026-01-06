@@ -11,7 +11,7 @@ export class GalponesController {
   constructor(private readonly galponesService: GalponesService) {}
 
   @Post()
-  @Roles('ADMIN')
+  @Roles('ADMIN', 'GERENTE', 'GALPONERO')
   create(@Body() createGalponDto: CreateGalponDto) {
     return this.galponesService.create(createGalponDto);
   }
@@ -20,6 +20,12 @@ export class GalponesController {
   @Roles('ADMIN', 'GERENTE', 'GALPONERO')
   findAll() {
     return this.galponesService.findAll();
+  }
+
+  @Get('finca/:fincaId')
+  @Roles('ADMIN', 'GERENTE', 'GALPONERO')
+  findByFinca(@Param('fincaId') fincaId: string) {
+    return this.galponesService.findByFinca(fincaId);
   }
 
   @Get(':id')

@@ -67,12 +67,18 @@ export const generateVentaPDF = async (venta: any) => {
             <div class="total-row">
                 <span class="label">Total:</span> $${venta.total.toLocaleString()}
             </div>
+            ${venta.forma_pago === 'CREDITO' ? `
             <div class="total-row">
                 <span class="label">Abono:</span> $${(venta.abono || 0).toLocaleString()}
             </div>
             <div class="grand-total">
                 <span class="label">Saldo Pendiente:</span> $${(venta.total - (venta.abono || 0)).toLocaleString()}
             </div>
+            ` : `
+            <div class="grand-total">
+                <span class="label">Estado:</span> PAGADO
+            </div>
+            `}
         </div>
 
         <div class="info-section" style="margin-top: 30px;">
@@ -151,6 +157,10 @@ export const generateResumenGlobalPDF = async (summary: any) => {
                     <div class="card-label">Dinero en Caja</div>
                     <div class="card-value">${formatCurrency(summary.flujo_caja.caja_actual)}</div>
                 </div>
+                <div class="summary-card" style="border-left-color: #2ecc71;">
+                    <div class="card-label">Ventas al Contado</div>
+                    <div class="card-value">${formatCurrency(summary.flujo_caja.total_ingresos_contado)}</div>
+                </div>
                 <div class="summary-card" style="border-left-color: #f39c12;">
                     <div class="card-label">Cuentas por Cobrar</div>
                     <div class="card-value">${formatCurrency(summary.flujo_caja.cuentas_por_cobrar)}</div>
@@ -158,6 +168,14 @@ export const generateResumenGlobalPDF = async (summary: any) => {
                 <div class="summary-card" style="border-left-color: #3498db;">
                     <div class="card-label">Patrimonio Total</div>
                     <div class="card-value">${formatCurrency(summary.balance.activo_total)}</div>
+                </div>
+                <div class="summary-card" style="border-left-color: #e74c3c;">
+                    <div class="card-label">Total Muertes</div>
+                    <div class="card-value">${summary.detalles_lotes.reduce((sum: number, lote: any) => sum + (lote.mortalidad_total || 0), 0)} aves</div>
+                </div>
+                <div class="summary-card" style="border-left-color: #e74c3c;">
+                    <div class="card-label">Pérdida por Mortalidad</div>
+                    <div class="card-value">${formatCurrency(summary.flujo_caja.perdida_mortalidad || 0)}</div>
                 </div>
             </div>
         </div>

@@ -11,7 +11,7 @@ export class LotesController {
   constructor(private readonly lotesService: LotesService) {}
 
   @Post()
-  @Roles('ADMIN', 'GERENTE')
+  @Roles('ADMIN', 'GERENTE', 'GALPONERO')
   create(@Body() createLoteDto: CreateLoteDto) {
     return this.lotesService.create(createLoteDto);
   }
@@ -32,6 +32,12 @@ export class LotesController {
   @Roles('ADMIN', 'GERENTE')
   update(@Param('id') id: string, @Body() updateLoteDto: Partial<CreateLoteDto>) {
     return this.lotesService.update(id, updateLoteDto);
+  }
+
+  @Post(':id/finalize')
+  @Roles('ADMIN', 'GERENTE')
+  finalize(@Param('id') id: string) {
+    return this.lotesService.finalize(id);
   }
 
   @Delete(':id')

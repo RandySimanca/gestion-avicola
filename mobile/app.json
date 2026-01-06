@@ -24,6 +24,7 @@
       "package": "com.randysimanca.mobile",
       "usesCleartextTraffic": true,
       "permissions": [
+        "INTERNET",
         "INTERNET"
       ]
     },
@@ -38,6 +39,12 @@
       "eas": {
         "projectId": "96a345bb-b91b-4815-8c21-0409e7ae0888"
       }
+    },
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/96a345bb-b91b-4815-8c21-0409e7ae0888"
     }
   }
 }

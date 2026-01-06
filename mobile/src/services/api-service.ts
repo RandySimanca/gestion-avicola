@@ -924,7 +924,8 @@ async deleteRegistroDiario(id: string): Promise<ApiResponse<any>> {
           cuentas_por_cobrar: 0,
           mortalidad_total: 0,
           poblacion_inicial: data.poblacion_inicial || 0,
-          poblacion_actual: data.poblacion_actual ?? data.poblacion_inicial
+          poblacion_actual: data.poblacion_actual ?? data.poblacion_inicial,
+          precio_compra_unitario: data.precio_compra_unitario || 0
         };
       });
 
@@ -952,10 +953,22 @@ async deleteRegistroDiario(id: string): Promise<ApiResponse<any>> {
         }
       });
 
+      // Calcular pérdidas por mortalidad (valor de las aves muertas)
+      // IMPORTANTE: Esto es una pérdida de INVENTARIO, no un egreso de caja
+      // El dinero ya salió cuando se compraron las aves, no cuando murieron
+      let perdidaMortalidad = 0;
+      Object.values(detallesLotes).forEach((lote: any) => {
+        const perdidaLote = lote.mortalidad_total * lote.precio_compra_unitario;
+        perdidaMortalidad += perdidaLote;
+      });
+
       // Cálculos Financieros
+      // La pérdida por mortalidad NO se suma a egresos de caja (el dinero ya salió al comprar)
       const cajaActual = totalIngresosContado - totalEgresosCaja;
       const patrimonioNeto = cajaActual + valorInventario + cuentasPorCobrar;
-      const utilidadOperativa = (totalIngresosContado + cuentasPorCobrar) - gastosOperativos - consumosRegistrados;
+      
+      // La utilidad operativa SÍ considera la pérdida porque afecta la rentabilidad del negocio
+      const utilidadOperativa = (totalIngresosContado + cuentasPorCobrar) - gastosOperativos - consumosRegistrados - perdidaMortalidad;
       const margenOperativo = (totalIngresosContado + cuentasPorCobrar) > 0 ? (utilidadOperativa / (totalIngresosContado + cuentasPorCobrar)) * 100 : 0;
 
       return {
@@ -967,6 +980,7 @@ async deleteRegistroDiario(id: string): Promise<ApiResponse<any>> {
             cuentas_por_cobrar: cuentasPorCobrar,
             gastos_operativos: gastosOperativos,
             inversion_insumos: inversionInsumos,
+            perdida_mortalidad: perdidaMortalidad,
             total_egresos_caja: totalEgresosCaja,
             caja_actual: cajaActual,
           },

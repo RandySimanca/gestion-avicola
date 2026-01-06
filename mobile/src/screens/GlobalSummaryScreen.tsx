@@ -122,10 +122,13 @@ export default function GlobalSummaryScreen() {
                                 <Text style={styles.sectionTitle}>Movimiento de Dinero (Caja)</Text>
                             </View>
                             <View style={styles.card}>
+                                <Text style={styles.subSectionTitle}>Ingresos</Text>
                                 {renderRow('Ventas de contado (efectivo recibido)', summary.flujo_caja.total_ingresos_contado, '#2ecc71')}
                                 {renderRow('Ventas a crédito (pendiente cobro)', summary.flujo_caja.cuentas_por_cobrar, '#f39c12')}
+                                <View style={styles.divider} />
+                                <Text style={styles.subSectionTitle}>Egresos de Caja</Text>
                                 {renderRow('Gastos operativos (Nómina, servicios...)', summary.flujo_caja.gastos_operativos, '#e74c3c')}
-                                {renderRow('Compras de insumos', summary.flujo_caja.inversion_insumos, '#f39c12')}
+                                {renderRow('Compras de insumos (efectivo pagado)', summary.flujo_caja.inversion_insumos, '#e74c3c')}
                                 <View style={styles.divider} />
                                 {renderRow('Total que salió de caja', summary.flujo_caja.total_egresos_caja, '#e74c3c')}
                                 <View style={styles.divider} />
@@ -137,6 +140,12 @@ export default function GlobalSummaryScreen() {
                                         {formatCurrency(summary.flujo_caja.caja_actual)}
                                     </Text>
                                 </View>
+                                <View style={styles.divider} />
+                                <Text style={styles.subSectionTitle}>Pérdidas de Inventario</Text>
+                                {renderRow('Pérdida por mortalidad de aves', summary.flujo_caja.perdida_mortalidad, '#e74c3c')}
+                                <Text style={styles.infoText}>
+                                    ⚠️ Esta pérdida no afecta la caja (el dinero ya salió al comprar las aves)
+                                </Text>
                             </View>
                         </View>
 
@@ -162,7 +171,7 @@ export default function GlobalSummaryScreen() {
                             </View>
                             <View style={styles.card}>
                                 <Text style={styles.subSectionTitle}>Activos Corrientes</Text>
-                                {renderRow('Efectivo en Caja', summary.balance.efectivo, '#2ecc71')}
+                                {renderRow('Efectivo en Caja', summary.balance.efectivo, summary.balance.efectivo >= 0 ? '#2ecc71' : '#e74c3c')}
                                 {renderRow('Cuentas por Cobrar', summary.balance.cuentas_por_cobrar, '#f39c12')}
                                 {renderRow('Inventarios (Insumos)', summary.balance.inventario, '#3498db')}
                                 <View style={styles.divider} />
