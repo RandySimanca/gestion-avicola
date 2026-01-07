@@ -122,6 +122,8 @@ export default function EditLoteScreen({ route, navigation }: Props) {
                     <Picker
                         selectedValue={tipoAve}
                         onValueChange={(itemValue) => setTipoAve(itemValue)}
+                        style={styles.picker}
+                        dropdownIconColor="#000"
                     >
                         <Picker.Item label="Ponedora" value="PONEDORA" />
                         <Picker.Item label="Engorde" value="ENGORDE" />
@@ -165,6 +167,8 @@ export default function EditLoteScreen({ route, navigation }: Props) {
                     <Picker
                         selectedValue={fincaId}
                         onValueChange={(itemValue) => setFincaId(itemValue)}
+                        style={styles.picker}
+                        dropdownIconColor="#000"
                     >
                         <Picker.Item label="Seleccione una finca" value="" />
                         {fincas.map((f) => (
@@ -178,6 +182,8 @@ export default function EditLoteScreen({ route, navigation }: Props) {
                     <Picker
                         selectedValue={galponId}
                         onValueChange={(itemValue) => setGalponId(itemValue)}
+                        style={styles.picker}
+                        dropdownIconColor="#000"
                     >
                         <Picker.Item label="Seleccione un galpón" value="" />
                         {galpones
@@ -255,6 +261,9 @@ const styles = StyleSheet.create({
     },
     flex1: {
         flex: 1,
+    },
+    picker: {
+        color: '#000',
     },
     submitButton: {
         backgroundColor: '#3498db',

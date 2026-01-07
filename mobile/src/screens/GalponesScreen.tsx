@@ -1,9 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, TextInput, Modal, ActivityIndicator, Alert } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import FincaSelector from '../components/FincaSelector';
 import apiService from '../services/api-service';
+import { useAuth } from '../context/AuthContext';
 
 export default function GalponesScreen({ navigation }: any) {
+    const { user } = useAuth();
+    const isAdmin = user?.role?.toUpperCase() === 'ADMIN' ||
+        user?.role?.toUpperCase() === 'PROPIETARIO' ||
+        user?.role?.toUpperCase() === 'GERENTE';
     const [galpones, setGalpones] = useState<any[]>([]);
     const [loading, setLoading] = useState(false);
     const [selectedFinca, setSelectedFinca] = useState<any>(null);
@@ -112,12 +118,22 @@ export default function GalponesScreen({ navigation }: any) {
                 </View>
                 <Text style={styles.galponInfo}>Capacidad: {item.capacidad_max} aves</Text>
             </View>
-            <TouchableOpacity
-                style={styles.deleteButton}
-                onPress={() => handleDelete(item.id)}
-            >
-                <Text style={styles.deleteButtonText}>🗑️</Text>
-            </TouchableOpacity>
+            {isAdmin && (
+                <View style={styles.actions}>
+                    <TouchableOpacity
+                        style={styles.actionButton}
+                        onPress={() => navigation.navigate('EditGalpon', { galponId: item.id })}
+                    >
+                        <Ionicons name="pencil-outline" size={24} color="#3498db" />
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                        style={styles.actionButton}
+                        onPress={() => handleDelete(item.id)}
+                    >
+                        <Ionicons name="trash-outline" size={24} color="#e74c3c" />
+                    </TouchableOpacity>
+                </View>
+            )}
         </View>
     );
 
@@ -285,12 +301,13 @@ const styles = StyleSheet.create({
         color: '#3498db',
         fontWeight: 'bold',
     },
-    deleteButton: {
-        padding: 10,
-        marginLeft: 10,
+    actions: {
+        flexDirection: 'row',
+        alignItems: 'center',
     },
-    deleteButtonText: {
-        fontSize: 20,
+    actionButton: {
+        padding: 8,
+        marginLeft: 5,
     },
     fab: {
         position: 'absolute',

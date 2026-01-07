@@ -14,8 +14,18 @@ import { Picker } from '@react-native-picker/picker';
 import { Ionicons } from '@expo/vector-icons';
 import apiService from '../services/api-service';
 import LoteSelector from '../components/LoteSelector';
+import { useAuth } from '../context/AuthContext';
+import { useNavigation } from '@react-navigation/native';
 
 export default function GastosScreen() {
+    const { user } = useAuth();
+    const navigation = useNavigation<any>();
+
+    // Robust admin check consistent with other screens
+    const isAdmin = user?.role?.toUpperCase() === 'ADMIN' ||
+        user?.role?.toUpperCase() === 'PROPIETARIO' ||
+        user?.role?.toUpperCase() === 'GERENTE';
+
     const [loteId, setLoteId] = useState('');
     const [concepto, setConcepto] = useState('');
     const [categoria, setCategoria] = useState('GASTO');
@@ -161,9 +171,19 @@ export default function GastosScreen() {
             </View>
             <View style={styles.gastoRight}>
                 <Text style={styles.gastoTotal}>{formatCurrency(item.total)}</Text>
-                <TouchableOpacity onPress={() => handleDelete(item.id)}>
-                    <Ionicons name="trash-outline" size={20} color="#e74c3c" />
-                </TouchableOpacity>
+                <View style={styles.actionButtons}>
+                    {isAdmin && (
+                        <TouchableOpacity
+                            onPress={() => navigation.navigate('EditGasto', { gastoId: item.id })}
+                            style={styles.actionButton}
+                        >
+                            <Ionicons name="pencil-outline" size={20} color="#3498db" />
+                        </TouchableOpacity>
+                    )}
+                    <TouchableOpacity onPress={() => handleDelete(item.id)} style={styles.actionButton}>
+                        <Ionicons name="trash-outline" size={20} color="#e74c3c" />
+                    </TouchableOpacity>
+                </View>
             </View>
         </View>
     );
@@ -329,5 +349,7 @@ const styles = StyleSheet.create({
     gastoDetalle: { fontSize: 13, color: '#7f8c8d', marginTop: 4 },
     gastoRight: { alignItems: 'flex-end', justifyContent: 'space-between' },
     gastoTotal: { fontSize: 16, fontWeight: 'bold', color: '#e74c3c' },
+    actionButtons: { flexDirection: 'row', alignItems: 'center', marginTop: 5 },
+    actionButton: { padding: 5, marginLeft: 5 },
     emptyText: { textAlign: 'center', color: '#95a5a6', marginTop: 40, fontStyle: 'italic' },
 });

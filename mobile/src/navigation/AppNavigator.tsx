@@ -35,6 +35,8 @@ import GastosScreen from '../screens/GastosScreen';
 import RegistrosMortalidadScreen from '../screens/RegistrosMortalidadScreen';
 import EditarMortalidadScreen from '../screens/EditarMortalidadScreen';
 import EditarVentaScreen from '../screens/EditarVentaScreen';
+import EditGalponScreen from '../screens/EditGalponScreen';
+import EditGastoScreen from '../screens/EditGastoScreen';
 
 export type AuthStackParamList = {
     Login: undefined;
@@ -67,6 +69,8 @@ export type RootDrawerParamList = {
     RegistrosMortalidad: undefined;
     EditarMortalidad: { registro: any };
     EditarVenta: { venta: any };
+    EditGalpon: { galponId: string };
+    EditGasto: { gastoId: string };
 };
 
 const Stack = createNativeStackNavigator<AuthStackParamList>();
@@ -275,6 +279,22 @@ function MainDrawer() {
                 component={EditLoteScreen}
                 options={{
                     title: 'Editar Lote',
+                    drawerItemStyle: { display: 'none' },
+                }}
+            />
+            <Drawer.Screen
+                name="EditGalpon"
+                component={EditGalponScreen}
+                options={{
+                    title: 'Editar Galpón',
+                    drawerItemStyle: { display: 'none' },
+                }}
+            />
+            <Drawer.Screen
+                name="EditGasto"
+                component={EditGastoScreen}
+                options={{
+                    title: 'Editar Gasto',
                     drawerItemStyle: { display: 'none' },
                 }}
             />

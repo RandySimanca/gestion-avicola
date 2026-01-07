@@ -135,10 +135,29 @@ class ApiService {
   // Métodos para Lotes
   async getLotes(): Promise<ApiResponse<any[]>> {
     try {
+      // 1. Obtener Lotes
       const q = query(collection(db, 'LOTE'));
       const querySnapshot = await getDocs(q);
       const lotes = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      return { success: true, data: lotes };
+
+      // 2. Obtener Fincas y Galpones para mapear nombres si faltan
+      // Nota: Esto podría optimizarse cargando solo los necesarios, pero para el volumen actual está bien
+      const [fincasRes, galponesRes] = await Promise.all([
+        this.getFincas(),
+        this.getGalpones()
+      ]);
+
+      const fincasMap = new Map(fincasRes.data?.map((f: any) => [f.id, f.nombre]) || []);
+      const galponesMap = new Map(galponesRes.data?.map((g: any) => [g.id, g.nombre]) || []);
+
+      // 3. Enriquecer datos
+      const lotesEnriquecidos = lotes.map((lote: any) => ({
+        ...lote,
+        finca_nombre: lote.finca_nombre || fincasMap.get(lote.finca_id) || 'N/A',
+        galpon_nombre: lote.galpon_nombre || galponesMap.get(lote.galpon_id) || 'N/A'
+      }));
+
+      return { success: true, data: lotesEnriquecidos };
     } catch (error: any) {
       return { success: false, error: error.message };
     }
@@ -274,6 +293,74 @@ class ApiService {
   }
 
   // Métodos para Gastos (Con lógica de negocio)
+  async getGasto(id: string): Promise<ApiResponse<any>> {
+    try {
+      const docRef = doc(db, 'GASTOS', id);
+      const docSnap = await getDoc(docRef);
+      if (docSnap.exists()) {
+        return { success: true, data: { id: docSnap.id, ...docSnap.data() } };
+      } else {
+        return { success: false, error: 'Gasto no encontrado' };
+      }
+    } catch (error: any) {
+      return { success: false, error: error.message };
+    }
+  }
+
+  async updateGasto(id: string, gasto: any): Promise<ApiResponse<any>> {
+    try {
+      await runTransaction(db, async (transaction) => {
+        const gastoRef = doc(db, 'GASTOS', id);
+        const gastoDoc = await transaction.get(gastoRef);
+        
+        if (!gastoDoc.exists()) {
+          throw new Error('Gasto no encontrado');
+        }
+
+        const gastoAnterior = gastoDoc.data();
+
+        // Si era una compra de insumo, revertir el stock anterior
+        if (gastoAnterior.tipo_gasto === 'COMPRA_INSUMO' && gastoAnterior.insumo_id) {
+          const insumoRef = doc(db, 'INSUMO', gastoAnterior.insumo_id);
+          const insumoDoc = await transaction.get(insumoRef);
+          
+          if (insumoDoc.exists()) {
+            const stockActual = insumoDoc.data().stock_actual || 0;
+            transaction.update(insumoRef, {
+              stock_actual: stockActual - Number(gastoAnterior.cantidad)
+            });
+          }
+        }
+
+        // Si la nueva versión es compra de insumo, aplicar el nuevo stock
+        if (gasto.tipo_gasto === 'COMPRA_INSUMO' && gasto.insumo_id) {
+          const insumoRef = doc(db, 'INSUMO', gasto.insumo_id);
+          const insumoDoc = await transaction.get(insumoRef);
+          
+          if (!insumoDoc.exists()) {
+            throw new Error('Insumo no encontrado');
+          }
+
+          const stockActual = insumoDoc.data().stock_actual || 0;
+          // Nota: Si es el mismo insumo, el stockActual ya tiene restada la cantidad anterior (dentro de la transacción)
+          // Si es diferente insumo, es el stock actual de ese otro insumo.
+          
+          transaction.update(insumoRef, {
+            stock_actual: stockActual + Number(gasto.cantidad),
+            precio_unitario: Number(gasto.precio_unitario)
+          });
+        }
+
+        // Actualizar el gasto
+        transaction.update(gastoRef, gasto);
+      });
+
+      return { success: true, data: { id, ...gasto } };
+    } catch (error: any) {
+      return { success: false, error: error.message };
+    }
+  }
+
   async createGasto(gasto: any): Promise<ApiResponse<any>> {
     try {
       // Usar transacción para asegurar consistencia
@@ -735,6 +822,29 @@ async deleteRegistroDiario(id: string): Promise<ApiResponse<any>> {
       const querySnapshot = await getDocs(q);
       const galpones = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       return { success: true, data: galpones };
+    } catch (error: any) {
+      return { success: false, error: error.message };
+    }
+  }
+
+  async getGalpon(id: string): Promise<ApiResponse<any>> {
+    try {
+      const docRef = doc(db, 'GALPON', id);
+      const docSnap = await getDoc(docRef);
+      if (docSnap.exists()) {
+        return { success: true, data: { id: docSnap.id, ...docSnap.data() } };
+      } else {
+        return { success: false, error: 'Galpón no encontrado' };
+      }
+    } catch (error: any) {
+      return { success: false, error: error.message };
+    }
+  }
+
+  async updateGalpon(id: string, galpon: any): Promise<ApiResponse<any>> {
+    try {
+      await updateDoc(doc(db, 'GALPON', id), galpon);
+      return { success: true, data: { id, ...galpon } };
     } catch (error: any) {
       return { success: false, error: error.message };
     }

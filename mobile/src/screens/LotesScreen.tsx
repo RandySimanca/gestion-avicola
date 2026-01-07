@@ -19,7 +19,9 @@ export default function LotesScreen({ navigation }: Props) {
     const [loading, setLoading] = useState(true);
     const [showFinalized, setShowFinalized] = useState(false);
     const { user } = useAuth();
-    const isAdmin = user?.role === 'ADMIN' || user?.role === 'GERENTE';
+    const isAdmin = user?.role?.toUpperCase() === 'ADMIN' ||
+        user?.role?.toUpperCase() === 'GERENTE' ||
+        user?.role?.toUpperCase() === 'PROPIETARIO';
 
     useEffect(() => {
         const unsubscribe = navigation.addListener('focus', () => {

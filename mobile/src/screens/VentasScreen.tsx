@@ -337,11 +337,13 @@ const styles = StyleSheet.create({
     },
     cardActions: {
         flexDirection: 'row',
+        flexWrap: 'wrap',
         justifyContent: 'space-around',
         marginTop: 10,
         paddingTop: 10,
         borderTopWidth: 1,
         borderTopColor: '#f0f0f0',
+        gap: 10,
     },
     actionButton: {
         flexDirection: 'row',
