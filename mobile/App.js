@@ -4,6 +4,7 @@ import { Alert } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import * as Updates from 'expo-updates';
 import { AuthProvider } from './src/context/AuthContext';
+import { BusinessProvider } from './src/context/BusinessContext';
 import AppNavigator from './src/navigation/AppNavigator';
 import { initDatabase } from './src/database/db';
 
@@ -63,8 +64,10 @@ export default function App() {
 
   return (
     <AuthProvider>
-      <AppNavigator />
-      <StatusBar style="auto" />
+      <BusinessProvider>
+        <AppNavigator />
+        <StatusBar style="auto" />
+      </BusinessProvider>
     </AuthProvider>
   );
 }

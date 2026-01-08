@@ -5,6 +5,7 @@ import { createDrawerNavigator } from '@react-navigation/drawer';
 import { ActivityIndicator, View, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../context/AuthContext';
+import { useBusiness, TipoNegocio } from '../context/BusinessContext';
 import CustomDrawerContent from '../components/CustomDrawerContent';
 
 // Screens
@@ -100,6 +101,8 @@ function AuthStack() {
 
 // Drawer para usuarios autenticados
 function MainDrawer() {
+    const { tipoNegocio } = useBusiness();
+
     return (
         <Drawer.Navigator
             id="main"
@@ -227,6 +230,18 @@ function MainDrawer() {
                 }}
             />
 
+            {/* Pantallas específicas por negocio */}
+            {tipoNegocio === TipoNegocio.PONEDORAS && (
+                <Drawer.Screen
+                    name="Postura"
+                    component={PosturaScreen}
+                    options={{
+                        title: 'Producción de Huevos',
+                        drawerIcon: ({ color, size }) => <Ionicons name="egg-outline" size={size} color={color} />
+                    }}
+                />
+            )}
+
             {/* Pantallas que no están en el menú principal pero necesitan estar en el stack/drawer */}
             <Drawer.Screen
                 name="Mortalidad"
@@ -247,11 +262,6 @@ function MainDrawer() {
                 name="Alimento"
                 component={AlimentoScreen}
                 options={{ drawerItemStyle: { display: 'none' }, title: 'Alimento' }}
-            />
-            <Drawer.Screen
-                name="Postura"
-                component={PosturaScreen}
-                options={{ drawerItemStyle: { display: 'none' }, title: 'Postura' }}
             />
             <Drawer.Screen
                 name="CreateLote"

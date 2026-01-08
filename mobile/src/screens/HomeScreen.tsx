@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, Alert, ActivityIndicator, ScrollView, SafeAreaView, TouchableOpacity, Dimensions } from 'react-native';
 import { useAuth } from '../context/AuthContext';
+import { useBusiness, TipoNegocio } from '../context/BusinessContext';
 import apiService from '../services/api-service';
 
 const { width } = Dimensions.get('window');
@@ -15,8 +16,16 @@ interface Props {
     navigation: HomeScreenNavigationProp;
 }
 
+const NEGOCIOS = [
+    { tipo: TipoNegocio.PONEDORAS, nombre: 'Ponedoras', icon: '🐔', color: '#f1c40f' },
+    { tipo: TipoNegocio.DESCARTE, nombre: 'Descarte', icon: '🐓', color: '#e74c3c' },
+    { tipo: TipoNegocio.VACAS, nombre: 'Vacas', icon: '🐄', color: '#3498db' },
+    { tipo: TipoNegocio.CERDOS, nombre: 'Cerdos', icon: '🐷', color: '#e67e22' }
+];
+
 export default function HomeScreen({ navigation }: Props) {
     const { user } = useAuth();
+    const { tipoNegocio, setTipoNegocio } = useBusiness();
     const [pendingCount, setPendingCount] = useState(0);
     const [syncing, setSyncing] = useState(false);
     const [stats, setStats] = useState({
@@ -32,16 +41,16 @@ export default function HomeScreen({ navigation }: Props) {
     useEffect(() => {
         const unsubscribe = navigation.addListener('focus', () => {
             checkPendingRecords();
-            loadDashboardStats();
+            loadDashboardStats(tipoNegocio);
         });
         checkPendingRecords();
-        loadDashboardStats();
+        loadDashboardStats(tipoNegocio);
         return unsubscribe;
-    }, [navigation]);
+    }, [navigation, tipoNegocio]);
 
-    const loadDashboardStats = async () => {
+    const loadDashboardStats = async (tipo = tipoNegocio) => {
         try {
-            const response = await apiService.getGlobalKPIs();
+            const response = await apiService.getGlobalKPIs(tipo);
             if (response.success && response.data) {
                 setStats({
                     totalAves: response.data.totalAves,
@@ -128,8 +137,39 @@ export default function HomeScreen({ navigation }: Props) {
         <SafeAreaView style={styles.safeArea}>
             <ScrollView contentContainerStyle={styles.scrollContent}>
                 <View style={styles.header}>
-                    <Text style={styles.welcomeText}>Hola,</Text>
-                    <Text style={styles.userName}>{user?.name || 'Usuario'}</Text>
+                    <View>
+                        <Text style={styles.welcomeText}>Hola,</Text>
+                        <Text style={styles.userName}>{user?.name || 'Usuario'}</Text>
+                    </View>
+                    <View style={styles.businessBadge}>
+                        <Text style={styles.businessBadgeText}>
+                            {NEGOCIOS.find(n => n.tipo === tipoNegocio)?.nombre}
+                        </Text>
+                    </View>
+                </View>
+
+                <View style={styles.businessSelectorContainer}>
+                    <Text style={styles.selectorTitle}>Selecciona tu negocio:</Text>
+                    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.businessGrid}>
+                        {NEGOCIOS.map(negocio => (
+                            <TouchableOpacity
+                                key={negocio.tipo}
+                                style={[
+                                    styles.businessCard,
+                                    tipoNegocio === negocio.tipo && { backgroundColor: negocio.color + '20', borderColor: negocio.color, borderWidth: 2 }
+                                ]}
+                                onPress={() => {
+                                    setTipoNegocio(negocio.tipo);
+                                    apiService.setTipoNegocio(negocio.tipo);
+                                }}
+                            >
+                                <Text style={styles.businessIcon}>{negocio.icon}</Text>
+                                <Text style={[styles.businessName, tipoNegocio === negocio.tipo && { color: negocio.color, fontWeight: 'bold' }]}>
+                                    {negocio.nombre}
+                                </Text>
+                            </TouchableOpacity>
+                        ))}
+                    </ScrollView>
                 </View>
 
                 {pendingCount > 0 && (
@@ -358,5 +398,52 @@ const styles = StyleSheet.create({
         fontSize: 14,
         color: '#2ecc71',
         marginTop: 2,
+    },
+    businessBadge: {
+        backgroundColor: '#f1c40f',
+        paddingHorizontal: 12,
+        paddingVertical: 6,
+        borderRadius: 20,
+    },
+    businessBadgeText: {
+        color: '#fff',
+        fontWeight: 'bold',
+        fontSize: 12,
+    },
+    businessSelectorContainer: {
+        paddingHorizontal: 20,
+        marginTop: 20,
+    },
+    selectorTitle: {
+        fontSize: 14,
+        color: '#7f8c8d',
+        marginBottom: 10,
+        fontWeight: '600',
+    },
+    businessGrid: {
+        paddingRight: 20,
+        gap: 12,
+    },
+    businessCard: {
+        backgroundColor: '#fff',
+        padding: 15,
+        borderRadius: 15,
+        alignItems: 'center',
+        minWidth: 100,
+        borderWidth: 1,
+        borderColor: '#f0f0f0',
+        elevation: 2,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.05,
+        shadowRadius: 5,
+    },
+    businessIcon: {
+        fontSize: 24,
+        marginBottom: 5,
+    },
+    businessName: {
+        fontSize: 12,
+        color: '#2c3e50',
     },
 });

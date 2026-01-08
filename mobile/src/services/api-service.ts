@@ -22,6 +22,7 @@ import {
   onAuthStateChanged
 } from 'firebase/auth';
 import { db, auth } from '../config/firebaseConfig';
+import { TipoNegocio } from '../context/BusinessContext';
 
 export interface ApiResponse<T> {
   success: boolean;
@@ -44,6 +45,11 @@ export interface AuthResponse {
 class ApiService {
   private isOnline: boolean = true;
   private currentUser: any = null;
+  private currentTipoNegocio: TipoNegocio | null = null;
+
+  setTipoNegocio(tipo: TipoNegocio) {
+    this.currentTipoNegocio = tipo;
+  }
 
   constructor() {
     // Escuchar cambios en la autenticación
@@ -133,20 +139,35 @@ class ApiService {
   }
 
   // Métodos para Lotes
-  async getLotes(): Promise<ApiResponse<any[]>> {
+  async getLotes(tipoNegocio?: TipoNegocio): Promise<ApiResponse<any[]>> {
     try {
-      // 1. Obtener Lotes
-      const q = query(collection(db, 'LOTE'));
-      const querySnapshot = await getDocs(q);
+      const tipo = tipoNegocio || this.currentTipoNegocio;
+
+      // 1. Obtener Lotes filtrados por tipo_negocio
+      let qLotes = query(collection(db, 'LOTE'));
+      if (tipo) {
+        qLotes = query(collection(db, 'LOTE'), where('tipo_negocio', '==', tipo));
+      }
+      const querySnapshot = await getDocs(qLotes);
       const lotes = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
 
-      // 2. Obtener Fincas, Galpones, Registros, Gastos y Ventas
+      // 2. Obtener Fincas, Galpones, Registros, Gastos y Ventas (también filtrados)
+      let qRegistros = query(collection(db, 'REGISTRO_DIARIO_PRODUCCION'));
+      let qGastos = query(collection(db, 'GASTOS'));
+      let qVentas = query(collection(db, 'VENTAS'));
+
+      if (tipo) {
+        qRegistros = query(collection(db, 'REGISTRO_DIARIO_PRODUCCION'), where('tipo_negocio', '==', tipo));
+        qGastos = query(collection(db, 'GASTOS'), where('tipo_negocio', '==', tipo));
+        qVentas = query(collection(db, 'VENTAS'), where('tipo_negocio', '==', tipo));
+      }
+
       const [fincasRes, galponesRes, registrosSnap, gastosSnap, ventasSnap] = await Promise.all([
         this.getFincas(),
         this.getGalpones(),
-        getDocs(collection(db, 'REGISTRO_DIARIO_PRODUCCION')),
-        getDocs(collection(db, 'GASTOS')),
-        getDocs(collection(db, 'VENTAS'))
+        getDocs(qRegistros),
+        getDocs(qGastos),
+        getDocs(qVentas)
       ]);
 
       const fincasMap = new Map(fincasRes.data?.map((f: any) => [f.id, f.nombre]) || []);
@@ -239,6 +260,7 @@ class ApiService {
     try {
       const data = {
         ...lote,
+        tipo_negocio: lote.tipo_negocio || this.currentTipoNegocio,
         poblacion_actual: lote.poblacion_actual ?? lote.poblacion_inicial,
         activo: true,
         createdAt: new Date().toISOString()
@@ -415,6 +437,7 @@ class ApiService {
         precio_unitario: gasto.precio_unitario,
         total: gasto.total,
         metodo_pago: gasto.metodo_pago || 'EFECTIVO',
+        tipo_negocio: gasto.tipo_negocio || this.currentTipoNegocio,
         fecha_creacion: new Date().toISOString()
       };
       
@@ -432,14 +455,23 @@ class ApiService {
     }
   }
 
-  async getGastos(loteId?: string): Promise<ApiResponse<any[]>> {
+  async getGastos(loteId?: string, tipoNegocio?: TipoNegocio): Promise<ApiResponse<any[]>> {
     try {
-      let q;
+      const tipo = tipoNegocio || this.currentTipoNegocio;
+      let constraints = [];
+      
       if (loteId) {
-        q = query(collection(db, 'GASTOS'), where('lote_id', '==', loteId));
-      } else {
-        q = query(collection(db, 'GASTOS'));
+        constraints.push(where('lote_id', '==', loteId));
       }
+      
+      if (tipo) {
+        constraints.push(where('tipo_negocio', '==', tipo));
+      }
+      
+      const q = constraints.length > 0 
+        ? query(collection(db, 'GASTOS'), ...constraints)
+        : query(collection(db, 'GASTOS'));
+        
       const querySnapshot = await getDocs(q);
       const gastos = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       
@@ -492,6 +524,7 @@ class ApiService {
             transaction.set(loteRef, {
               nombre: compra.nombre_lote,
               tipo_ave: compra.tipo_ave,
+              tipo_negocio: compra.tipo_negocio || this.currentTipoNegocio,
               poblacion_inicial: compra.poblacion_inicial,
               poblacion_actual: compra.poblacion_inicial,
               precio_compra_unitario: compra.precio_compra_unitario,
@@ -517,6 +550,7 @@ class ApiService {
               total: compra.total,
               metodo_pago: compra.metodo_pago || 'EFECTIVO',
               lote_id: loteRef.id,
+              tipo_negocio: compra.tipo_negocio || this.currentTipoNegocio,
               fecha_creacion: new Date(),
             };
             if (compra.proveedor) gastoData.proveedor = compra.proveedor;
@@ -577,6 +611,7 @@ class ApiService {
               precio_unitario: compra.precio_unitario,
               total: compra.total,
               metodo_pago: compra.metodo_pago || 'EFECTIVO',
+              tipo_negocio: compra.tipo_negocio || this.currentTipoNegocio,
               insumo_id: insumoId,
               fecha_creacion: new Date(),
             };
@@ -775,6 +810,7 @@ class ApiService {
         const ventaRef = doc(collection(db, 'VENTAS'));
         transaction.set(ventaRef, {
           ...venta,
+          tipo_negocio: venta.tipo_negocio || this.currentTipoNegocio,
           abono: venta.abono || 0,
           fecha_creacion: new Date().toISOString()
         });
@@ -800,9 +836,19 @@ class ApiService {
     }
   }
 
-  async getVentas(): Promise<ApiResponse<any[]>> {
+  async getVentas(tipoNegocio?: TipoNegocio): Promise<ApiResponse<any[]>> {
     try {
-      const q = query(collection(db, 'VENTAS'), orderBy('fecha', 'desc'));
+      const tipo = tipoNegocio || this.currentTipoNegocio;
+      let q = query(collection(db, 'VENTAS'), orderBy('fecha', 'desc'));
+      
+      if (tipo) {
+        q = query(
+          collection(db, 'VENTAS'), 
+          where('tipo_negocio', '==', tipo),
+          orderBy('fecha', 'desc')
+        );
+      }
+      
       const querySnapshot = await getDocs(q);
       const ventas = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       return { success: true, data: ventas };
@@ -954,6 +1000,7 @@ async createRegistroDiario(datos: {
       const registroRef = doc(collection(db, 'REGISTRO_DIARIO_PRODUCCION'));
       transaction.set(registroRef, {
         ...datos,
+        tipo_negocio: (datos as any).tipo_negocio || this.currentTipoNegocio,
         ownerId: this.currentUser?.id || null,
         fecha_creacion: new Date().toISOString()
       });
@@ -1464,24 +1511,38 @@ async deleteRegistroDiario(id: string): Promise<ApiResponse<any>> {
     }
   }
 
-  async getGlobalKPIs(): Promise<ApiResponse<any>> {
+  async getGlobalKPIs(tipoNegocio?: TipoNegocio): Promise<ApiResponse<any>> {
     try {
-      // Obtener lotes activos
-      const lotesSnapshot = await getDocs(query(collection(db, 'LOTE'), where('activo', '==', true)));
+      const tipo = tipoNegocio || this.currentTipoNegocio;
+
+      // Obtener lotes activos filtrados
+      let qLotes = query(collection(db, 'LOTE'), where('activo', '==', true));
+      if (tipo) {
+        qLotes = query(collection(db, 'LOTE'), where('activo', '==', true), where('tipo_negocio', '==', tipo));
+      }
+      const lotesSnapshot = await getDocs(qLotes);
       const lotes = lotesSnapshot.docs.map(d => ({ id: d.id, ...d.data() }));
 
-      // Obtener registros recientes para producción y mortalidad
-      const registrosSnapshot = await getDocs(collection(db, 'REGISTRO_DIARIO_PRODUCCION'));
+      // Obtener registros filtrados
+      let qRegistros = collection(db, 'REGISTRO_DIARIO_PRODUCCION');
+      if (tipo) {
+        // @ts-ignore
+        qRegistros = query(collection(db, 'REGISTRO_DIARIO_PRODUCCION'), where('tipo_negocio', '==', tipo));
+      }
+      const registrosSnapshot = await getDocs(qRegistros);
       const registros = registrosSnapshot.docs.map(d => d.data());
 
-      // Calcular el inicio del día local en formato ISO para filtrado preciso
+      // ... (fechas)
       const ahora = new Date();
       const inicioHoyLocal = new Date(ahora.getFullYear(), ahora.getMonth(), ahora.getDate());
       const inicioHoyIso = inicioHoyLocal.toISOString();
-      const hoyPrefijo = ahora.toISOString().split('T')[0]; // Para compatibilidad con startsWith
 
-      // Obtener ventas de hoy para el resumen financiero rápido
-      const ventasSnapshot = await getDocs(query(collection(db, 'VENTAS'), where('fecha', '>=', inicioHoyIso)));
+      // Obtener ventas de hoy filtradas
+      let qVentas = query(collection(db, 'VENTAS'), where('fecha', '>=', inicioHoyIso));
+      if (tipo) {
+        qVentas = query(collection(db, 'VENTAS'), where('fecha', '>=', inicioHoyIso), where('tipo_negocio', '==', tipo));
+      }
+      const ventasSnapshot = await getDocs(qVentas);
       const ventasHoy = ventasSnapshot.docs
         .map(d => d.data())
         .filter((v: any) => v.fecha && v.fecha >= inicioHoyIso)
