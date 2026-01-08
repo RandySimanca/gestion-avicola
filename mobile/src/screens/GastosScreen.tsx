@@ -28,14 +28,12 @@ export default function GastosScreen() {
 
     const [loteId, setLoteId] = useState('');
     const [concepto, setConcepto] = useState('');
-    const [categoria, setCategoria] = useState('GASTO');
+    const [tipoGasto, setTipoGasto] = useState<'NOMINA' | 'SERVICIOS_PUBLICOS' | 'ARRIENDO' | 'MANTENIMIENTO' | 'ASEO' | 'OTRO'>('OTRO');
     const [cantidad, setCantidad] = useState('1');
     const [precioUnitario, setPrecioUnitario] = useState('');
     const [proveedor, setProveedor] = useState('');
     const [metodoPago, setMetodoPago] = useState('EFECTIVO');
-    const [insumoId, setInsumoId] = useState('');
-    const [tipoGasto, setTipoGasto] = useState<'COMPRA_INSUMO' | 'GASTO_OPERATIVO'>('GASTO_OPERATIVO');
-    const [insumos, setInsumos] = useState<any[]>([]);
+    const [observaciones, setObservaciones] = useState('');
     const [gastos, setGastos] = useState<any[]>([]);
     const [lotesMap, setLotesMap] = useState<Record<string, string>>({});
     const [loading, setLoading] = useState(false);
@@ -44,7 +42,6 @@ export default function GastosScreen() {
 
     useEffect(() => {
         loadGastos();
-        loadInsumos();
         loadLotes();
     }, [loteId]);
 
@@ -52,19 +49,8 @@ export default function GastosScreen() {
         const response = await apiService.getLotes();
         if (response.success && response.data) {
             const map: Record<string, string> = {};
-            response.data.forEach(l => map[l.id] = l.nombre);
+            response.data.forEach((l: any) => map[l.id] = l.nombre);
             setLotesMap(map);
-        }
-    };
-
-    const loadInsumos = async () => {
-        try {
-            const response = await apiService.getInsumos();
-            if (response.success) {
-                setInsumos(response.data || []);
-            }
-        } catch (error) {
-            console.error('Error loading insumos:', error);
         }
     };
 
@@ -89,30 +75,32 @@ export default function GastosScreen() {
         }
 
         const total = parseFloat(cantidad) * parseFloat(precioUnitario);
-        const data = {
-            lote_id: loteId || null,
+        const data: any = {
             fecha: new Date().toISOString(),
             concepto,
-            categoria: tipoGasto === 'COMPRA_INSUMO' ? 'INVERSION' : 'GASTO',
+            tipo_gasto: tipoGasto,
             cantidad: parseFloat(cantidad),
             precio_unitario: parseFloat(precioUnitario),
             total,
-            proveedor,
             metodo_pago: metodoPago,
-            insumo_id: insumoId || null,
-            tipo_gasto: tipoGasto,
         };
+        
+        // Solo incluir campos opcionales si tienen valor
+        if (loteId) data.lote_id = loteId;
+        if (proveedor) data.proveedor = proveedor;
+        if (observaciones) data.observaciones = observaciones;
 
         setLoading(true);
         try {
             const response = await apiService.createGasto(data);
             if (response.success) {
-                Alert.alert('Éxito', 'Gasto registrado correctamente');
+                Alert.alert('Éxito', 'Gasto operativo registrado correctamente');
                 setConcepto('');
                 setPrecioUnitario('');
                 setCantidad('1');
                 setProveedor('');
-                setInsumoId('');
+                setObservaciones('');
+                setLoteId('');
                 setShowForm(false);
                 loadGastos();
             } else {
@@ -162,7 +150,7 @@ export default function GastosScreen() {
             <View style={styles.gastoInfo}>
                 <Text style={styles.gastoConcepto}>{item.concepto}</Text>
                 <Text style={styles.gastoMeta}>
-                    {new Date(item.fecha).toLocaleDateString()} • {item.categoria}
+                    {new Date(item.fecha).toLocaleDateString()} • {item.tipo_gasto}
                     {item.lote_id && lotesMap[item.lote_id] ? ` • ${lotesMap[item.lote_id]}` : ''}
                 </Text>
                 <Text style={styles.gastoDetalle}>
@@ -191,7 +179,7 @@ export default function GastosScreen() {
     return (
         <View style={styles.container}>
             <View style={styles.header}>
-                <Text style={styles.title}>Egresos (Gastos e Inversión)</Text>
+                <Text style={styles.title}>Gastos Operativos</Text>
                 <TouchableOpacity
                     style={styles.addButton}
                     onPress={() => setShowForm(!showForm)}
@@ -203,53 +191,33 @@ export default function GastosScreen() {
 
             {showForm && (
                 <ScrollView style={styles.form}>
-                    <Text style={styles.label}>Tipo de Registro *</Text>
+                    <Text style={styles.label}>Tipo de Gasto Operativo *</Text>
                     <View style={styles.pickerContainer}>
                         <Picker
                             selectedValue={tipoGasto}
                             onValueChange={(v: any) => setTipoGasto(v)}
                             style={styles.picker}
                         >
-                            <Picker.Item label="Gasto Operativo (Nómina, Servicios...)" value="GASTO_OPERATIVO" />
-                            <Picker.Item label="Compra de Insumo (Entrada a Bodega)" value="COMPRA_INSUMO" />
+                            <Picker.Item label="Nómina" value="NOMINA" />
+                            <Picker.Item label="Servicios Públicos" value="SERVICIOS_PUBLICOS" />
+                            <Picker.Item label="Arriendo" value="ARRIENDO" />
+                            <Picker.Item label="Mantenimiento" value="MANTENIMIENTO" />
+                            <Picker.Item label="Aseo" value="ASEO" />
+                            <Picker.Item label="Otro" value="OTRO" />
                         </Picker>
                     </View>
 
-                    {tipoGasto === 'COMPRA_INSUMO' ? (
-                        <>
-                            <Text style={styles.label}>Insumo a Comprar *</Text>
-                            <View style={styles.pickerContainer}>
-                                <Picker
-                                    selectedValue={insumoId}
-                                    onValueChange={(v) => {
-                                        setInsumoId(v);
-                                        const insumo = insumos.find(i => i.id === v);
-                                        if (insumo) setConcepto(`Compra: ${insumo.nombre_producto}`);
-                                    }}
-                                    style={styles.picker}
-                                >
-                                    <Picker.Item label="Seleccione un insumo..." value="" />
-                                    {insumos.map(i => (
-                                        <Picker.Item key={i.id} label={`${i.nombre_producto} (${i.tipo})`} value={i.id} />
-                                    ))}
-                                </Picker>
-                            </View>
-                        </>
-                    ) : (
-                        <>
-                            <Text style={styles.label}>Lote (Opcional)</Text>
-                            <LoteSelector onSelect={(lote) => setLoteId(lote.id)} selectedLoteId={loteId} />
+                    <Text style={styles.label}>Lote (Opcional)</Text>
+                    <LoteSelector onSelect={(lote) => setLoteId(lote.id)} selectedLoteId={loteId} />
 
-                            <Text style={styles.label}>Concepto *</Text>
-                            <TextInput
-                                style={styles.input}
-                                placeholder="Ej: Pago de nómina, Arriendo..."
-                                placeholderTextColor="#999"
-                                value={concepto}
-                                onChangeText={setConcepto}
-                            />
-                        </>
-                    )}
+                    <Text style={styles.label}>Concepto *</Text>
+                    <TextInput
+                        style={styles.input}
+                        placeholder="Ej: Pago de nómina, Arriendo, Servicio de luz..."
+                        placeholderTextColor="#999"
+                        value={concepto}
+                        onChangeText={setConcepto}
+                    />
 
                     <View style={styles.row}>
                         <View style={styles.flex1}>
@@ -297,6 +265,17 @@ export default function GastosScreen() {
                         </Picker>
                     </View>
 
+                    <Text style={styles.label}>Observaciones (Opcional)</Text>
+                    <TextInput
+                        style={[styles.input, { minHeight: 80, textAlignVertical: 'top' }]}
+                        placeholder="Notas adicionales..."
+                        placeholderTextColor="#999"
+                        value={observaciones}
+                        onChangeText={setObservaciones}
+                        multiline
+                        numberOfLines={3}
+                    />
+
                     <TouchableOpacity
                         style={[styles.saveButton, loading && { opacity: 0.7 }]}
                         onPress={handleSave}
@@ -308,7 +287,7 @@ export default function GastosScreen() {
             )}
 
             <View style={styles.listSection}>
-                <Text style={styles.sectionTitle}>Historial de Egresos</Text>
+                <Text style={styles.sectionTitle}>Historial de Gastos Operativos</Text>
                 {loadingList ? (
                     <ActivityIndicator size="large" color="#27ae60" style={{ marginTop: 20 }} />
                 ) : (

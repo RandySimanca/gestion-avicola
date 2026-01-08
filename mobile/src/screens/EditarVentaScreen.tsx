@@ -84,7 +84,9 @@ export default function EditarVentaScreen({ navigation, route }: any) {
                 <Text style={styles.title}>Editar Venta</Text>
                 <Text style={styles.subtitle}>Lote: {venta.lote_nombre || 'N/A'}</Text>
 
-                <Text style={styles.label}>Cantidad de Aves *</Text>
+                <Text style={styles.label}>
+                    {venta.tipo_producto === 'HUEVOS' ? 'Cantidad de Huevos *' : 'Cantidad de Aves *'}
+                </Text>
                 <TextInput
                     style={styles.input}
                     value={cantidad}

@@ -15,6 +15,9 @@ interface Props {
 export default function CreateVentaScreen({ navigation }: Props) {
     const [loteId, setLoteId] = useState('');
     const [loteNombre, setLoteNombre] = useState('');
+    const [loteTipo, setLoteTipo] = useState('');
+    const [tipoProducto, setTipoProducto] = useState('AVES'); // 'AVES' o 'HUEVOS'
+    const [tamañoHuevo, setTamañoHuevo] = useState('AAA');
     const [cantidad, setCantidad] = useState('');
     const [precioUnitario, setPrecioUnitario] = useState('');
     const [cliente, setCliente] = useState('');
@@ -53,6 +56,8 @@ export default function CreateVentaScreen({ navigation }: Props) {
         const data = {
             lote_id: loteId,
             lote_nombre: loteNombre,
+            tipo_producto: tipoProducto,
+            tamaño_huevo: tipoProducto === 'HUEVOS' ? tamañoHuevo : null,
             cantidad: cant,
             precio_unitario: precio,
             total,
@@ -111,17 +116,63 @@ export default function CreateVentaScreen({ navigation }: Props) {
     return (
         <ScrollView style={styles.container}>
             <View style={styles.form}>
-                <Text style={styles.title}>Registrar Venta de Aves</Text>
+                <Text style={styles.title}>Registrar Venta</Text>
 
                 <Text style={styles.label}>Lote *</Text>
-                <LoteSelector onSelect={(lote) => { setLoteId(lote.id); setLoteNombre(lote.nombre); }} selectedLoteId={loteId} />
+                <LoteSelector
+                    onSelect={(lote) => {
+                        setLoteId(lote.id);
+                        setLoteNombre(lote.nombre);
+                        setLoteTipo(lote.tipo_ave);
+                        if (lote.tipo_ave === 'PONEDORA') {
+                            setTipoProducto('HUEVOS');
+                        } else {
+                            setTipoProducto('AVES');
+                        }
+                    }}
+                    selectedLoteId={loteId}
+                />
 
-                <Text style={styles.label}>Cantidad de Aves *</Text>
+                <Text style={styles.label}>¿Qué está vendiendo? *</Text>
+                <View style={styles.pickerContainer}>
+                    <Picker
+                        selectedValue={tipoProducto}
+                        onValueChange={(itemValue) => setTipoProducto(itemValue)}
+                        style={styles.picker}
+                    >
+                        <Picker.Item label="Aves (Disminuye población)" value="AVES" />
+                        <Picker.Item label="Huevos (No afecta población)" value="HUEVOS" />
+                    </Picker>
+                </View>
+
+                {tipoProducto === 'HUEVOS' && (
+                    <>
+                        <Text style={styles.label}>Tamaño del Huevo *</Text>
+                        <View style={styles.pickerContainer}>
+                            <Picker
+                                selectedValue={tamañoHuevo}
+                                onValueChange={(itemValue) => setTamañoHuevo(itemValue)}
+                                style={styles.picker}
+                            >
+                                <Picker.Item label="Jumbo" value="JUMBO" />
+                                <Picker.Item label="AAA" value="AAA" />
+                                <Picker.Item label="AA" value="AA" />
+                                <Picker.Item label="A" value="A" />
+                                <Picker.Item label="B" value="B" />
+                                <Picker.Item label="C" value="C" />
+                            </Picker>
+                        </View>
+                    </>
+                )}
+
+                <Text style={styles.label}>
+                    {tipoProducto === 'HUEVOS' ? 'Cantidad de Huevos *' : 'Cantidad de Aves *'}
+                </Text>
                 <TextInput
                     style={styles.input}
                     value={cantidad}
                     onChangeText={setCantidad}
-                    placeholder="Ej: 50"
+                    placeholder={tipoProducto === 'HUEVOS' ? "Ej: 180" : "Ej: 50"}
                     placeholderTextColor="#999"
                     keyboardType="numeric"
                 />
@@ -131,17 +182,15 @@ export default function CreateVentaScreen({ navigation }: Props) {
                     style={styles.input}
                     value={precioUnitario}
                     onChangeText={setPrecioUnitario}
-                    placeholder="Ej: 15000"
+                    placeholder="Ej: 500"
                     placeholderTextColor="#999"
                     keyboardType="numeric"
                 />
 
-                {cantidad && precioUnitario && (
-                    <View style={styles.totalContainer}>
-                        <Text style={styles.totalLabel}>Total de la venta:</Text>
-                        <Text style={styles.totalValue}>{calcularTotal()}</Text>
-                    </View>
-                )}
+                <View style={styles.totalContainer}>
+                    <Text style={styles.totalLabel}>Total de la venta:</Text>
+                    <Text style={styles.totalValue}>{calcularTotal()}</Text>
+                </View>
 
                 <Text style={styles.label}>Cliente *</Text>
                 <TextInput

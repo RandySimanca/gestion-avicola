@@ -10,7 +10,8 @@
     "start:prod": "node dist/main",
     "lint": "eslint \"{src,apps,libs,test}/**/*.ts\" --fix",
     "test": "jest",
-    "promote-admin": "ts-node scripts/promote-admin.ts"
+    "promote-admin": "ts-node scripts/promote-admin.ts",
+    "migrate-tipo-negocio": "ts-node scripts/migrate-tipo-negocio.ts"
   },
   "dependencies": {
     "@nestjs/common": "^10.0.0",

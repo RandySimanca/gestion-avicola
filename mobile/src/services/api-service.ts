@@ -140,22 +140,63 @@ class ApiService {
       const querySnapshot = await getDocs(q);
       const lotes = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
 
-      // 2. Obtener Fincas y Galpones para mapear nombres si faltan
-      // Nota: Esto podría optimizarse cargando solo los necesarios, pero para el volumen actual está bien
-      const [fincasRes, galponesRes] = await Promise.all([
+      // 2. Obtener Fincas, Galpones, Registros, Gastos y Ventas
+      const [fincasRes, galponesRes, registrosSnap, gastosSnap, ventasSnap] = await Promise.all([
         this.getFincas(),
-        this.getGalpones()
+        this.getGalpones(),
+        getDocs(collection(db, 'REGISTRO_DIARIO_PRODUCCION')),
+        getDocs(collection(db, 'GASTOS')),
+        getDocs(collection(db, 'VENTAS'))
       ]);
 
       const fincasMap = new Map(fincasRes.data?.map((f: any) => [f.id, f.nombre]) || []);
       const galponesMap = new Map(galponesRes.data?.map((g: any) => [g.id, g.nombre]) || []);
+      
+      // Calcular mortalidad acumulada por lote
+      const mortalidadPorLote = new Map<string, number>();
+      registrosSnap.docs.forEach(doc => {
+        const data = doc.data();
+        const loteId = data.lote_id;
+        const mortalidad = Number(data.mortalidad_dia) || 0;
+        if (loteId) {
+          mortalidadPorLote.set(loteId, (mortalidadPorLote.get(loteId) || 0) + mortalidad);
+        }
+      });
+
+      // Calcular ROI por lote
+      const gastosPorLote = new Map<string, number>();
+      gastosSnap.docs.forEach(doc => {
+        const data = doc.data();
+        if (data.lote_id) {
+          gastosPorLote.set(data.lote_id, (gastosPorLote.get(data.lote_id) || 0) + (Number(data.total) || 0));
+        }
+      });
+
+      const ventasPorLote = new Map<string, number>();
+      ventasSnap.docs.forEach(doc => {
+        const data = doc.data();
+        if (data.lote_id) {
+          const monto = data.forma_pago === 'CREDITO' ? (Number(data.abono) || 0) : (Number(data.total) || 0);
+          ventasPorLote.set(data.lote_id, (ventasPorLote.get(data.lote_id) || 0) + monto);
+        }
+      });
 
       // 3. Enriquecer datos
-      const lotesEnriquecidos = lotes.map((lote: any) => ({
-        ...lote,
-        finca_nombre: lote.finca_nombre || fincasMap.get(lote.finca_id) || 'N/A',
-        galpon_nombre: lote.galpon_nombre || galponesMap.get(lote.galpon_id) || 'N/A'
-      }));
+      const lotesEnriquecidos = lotes.map((lote: any) => {
+        const totalInvertido = gastosPorLote.get(lote.id) || 0;
+        const totalVendido = ventasPorLote.get(lote.id) || 0;
+        const roi = totalInvertido > 0 ? Math.min(100, (totalVendido / totalInvertido) * 100) : 0;
+
+        return {
+          ...lote,
+          finca_nombre: lote.finca_nombre || fincasMap.get(lote.finca_id) || 'N/A',
+          galpon_nombre: lote.galpon_nombre || galponesMap.get(lote.galpon_id) || 'N/A',
+          mortalidad_acumulada: mortalidadPorLote.get(lote.id) || 0,
+          roi_porcentaje: roi,
+          total_invertido: totalInvertido,
+          total_vendido: totalVendido
+        };
+      });
 
       return { success: true, data: lotesEnriquecidos };
     } catch (error: any) {
@@ -363,35 +404,29 @@ class ApiService {
 
   async createGasto(gasto: any): Promise<ApiResponse<any>> {
     try {
-      // Usar transacción para asegurar consistencia
-      await runTransaction(db, async (transaction) => {
-        // 1. Crear el gasto
-        const gastoRef = doc(collection(db, 'GASTOS'));
-        transaction.set(gastoRef, {
-          ...gasto,
-          fecha_creacion: new Date().toISOString()
-        });
+      // Crear el gasto operativo (sin lógica de compras)
+      // Filtrar campos undefined antes de guardar
+      const gastoData: any = {
+        fecha: gasto.fecha,
+        concepto: gasto.concepto,
+        tipo_gasto: gasto.tipo_gasto,
+        categoria: 'GASTO', // Todos los gastos operativos son GASTO
+        cantidad: gasto.cantidad,
+        precio_unitario: gasto.precio_unitario,
+        total: gasto.total,
+        metodo_pago: gasto.metodo_pago || 'EFECTIVO',
+        fecha_creacion: new Date().toISOString()
+      };
+      
+      // Solo incluir campos opcionales si tienen valor
+      if (gasto.lote_id) gastoData.lote_id = gasto.lote_id;
+      if (gasto.proveedor) gastoData.proveedor = gasto.proveedor;
+      if (gasto.observaciones) gastoData.observaciones = gasto.observaciones;
 
-        // 2. Si es compra de insumo, actualizar stock
-        if (gasto.tipo_gasto === 'COMPRA_INSUMO' && gasto.insumo_id) {
-          const insumoRef = doc(db, 'INSUMO', gasto.insumo_id);
-          const insumoDoc = await transaction.get(insumoRef);
-          
-          if (!insumoDoc.exists()) {
-            throw new Error('Insumo no encontrado');
-          }
+      const gastoRef = doc(collection(db, 'GASTOS'));
+      await setDoc(gastoRef, gastoData);
 
-          const nuevoStock = (insumoDoc.data().stock_actual || 0) + Number(gasto.cantidad);
-          const nuevoPrecio = Number(gasto.precio_unitario); // Actualizar precio con la última compra
-
-          transaction.update(insumoRef, {
-            stock_actual: nuevoStock,
-            precio_unitario: nuevoPrecio
-          });
-        }
-      });
-
-      return { success: true, data: gasto };
+      return { success: true, data: { id: gastoRef.id, ...gastoData } };
     } catch (error: any) {
       return { success: false, error: error.message };
     }
@@ -407,7 +442,301 @@ class ApiService {
       }
       const querySnapshot = await getDocs(q);
       const gastos = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      return { success: true, data: gastos };
+      
+      // Filtrar solo gastos operativos (excluir compras y consumos)
+      const gastosOperativos = gastos.filter((gasto: any) => {
+        const tipoGasto = gasto.tipo_gasto;
+        return tipoGasto && 
+               tipoGasto !== 'COMPRA_LOTE' && 
+               tipoGasto !== 'COMPRA_INSUMO' && 
+               tipoGasto !== 'CONSUMO_LOTE';
+      });
+      
+      return { success: true, data: gastosOperativos };
+    } catch (error: any) {
+      return { success: false, error: error.message };
+    }
+  }
+
+  // Métodos para Compras
+  async createCompra(compra: any): Promise<ApiResponse<any>> {
+    try {
+      const isOnline = this.getConnectionStatus();
+      
+      if (isOnline) {
+        // Usar transacción para asegurar consistencia
+        let result: any = null;
+        
+        await runTransaction(db, async (transaction) => {
+          if (compra.tipo_compra === 'LOTE') {
+            // 1. Validar finca y galpón
+            const fincaRef = doc(db, 'FINCA', compra.finca_id);
+            const galponRef = doc(db, 'GALPON', compra.galpon_id);
+            const [fincaDoc, galponDoc] = await Promise.all([
+              transaction.get(fincaRef),
+              transaction.get(galponRef)
+            ]);
+
+            if (!fincaDoc.exists()) {
+              throw new Error('Finca no encontrada');
+            }
+            if (!galponDoc.exists()) {
+              throw new Error('Galpón no encontrado');
+            }
+
+            const fincaData = fincaDoc.data();
+            const galponData = galponDoc.data();
+
+            // 2. Crear el lote
+            const loteRef = doc(collection(db, 'LOTE'));
+            transaction.set(loteRef, {
+              nombre: compra.nombre_lote,
+              tipo_ave: compra.tipo_ave,
+              poblacion_inicial: compra.poblacion_inicial,
+              poblacion_actual: compra.poblacion_inicial,
+              precio_compra_unitario: compra.precio_compra_unitario,
+              finca_id: compra.finca_id,
+              finca_nombre: fincaData.nombre,
+              galpon_id: compra.galpon_id,
+              galpon_nombre: galponData.nombre,
+              fecha_ingreso: compra.fecha,
+              activo: true,
+              createdAt: new Date(),
+            });
+
+            // 3. Crear registro en GASTOS (filtrar campos undefined)
+            const gastoRef = doc(collection(db, 'GASTOS'));
+            const gastoData: any = {
+              tipo_compra: 'LOTE',
+              tipo_gasto: 'COMPRA_LOTE',
+              categoria: 'INVERSION',
+              fecha: compra.fecha,
+              concepto: `Compra de lote: ${compra.nombre_lote}`,
+              cantidad: compra.poblacion_inicial,
+              precio_unitario: compra.precio_compra_unitario,
+              total: compra.total,
+              metodo_pago: compra.metodo_pago || 'EFECTIVO',
+              lote_id: loteRef.id,
+              fecha_creacion: new Date(),
+            };
+            if (compra.proveedor) gastoData.proveedor = compra.proveedor;
+            if (compra.observaciones) gastoData.observaciones = compra.observaciones;
+            transaction.set(gastoRef, gastoData);
+
+            result = { id: gastoRef.id, lote_id: loteRef.id, gasto_id: gastoRef.id };
+          } else if (compra.tipo_compra === 'INSUMO') {
+            let insumoId: string;
+            let insumoNombre: string;
+
+            if (compra.insumo_id) {
+              // Insumo existente: actualizar stock
+              const insumoRef = doc(db, 'INSUMO', compra.insumo_id);
+              const insumoDoc = await transaction.get(insumoRef);
+
+              if (!insumoDoc.exists()) {
+                throw new Error('Insumo no encontrado');
+              }
+
+              const insumoData = insumoDoc.data();
+              insumoId = compra.insumo_id;
+              insumoNombre = insumoData.nombre_producto;
+
+              // Actualizar stock y precio
+              const nuevoStock = (insumoData.stock_actual || 0) + compra.cantidad;
+              transaction.update(insumoRef, {
+                stock_actual: nuevoStock,
+                precio_unitario: compra.precio_unitario,
+              });
+            } else {
+              // Nuevo insumo: crear en inventario (filtrar campos undefined)
+              const insumoRef = doc(collection(db, 'INSUMO'));
+              const insumoData: any = {
+                nombre_producto: compra.nombre_insumo,
+                tipo: compra.tipo_insumo,
+                unidad_medida: compra.unidad_medida,
+                stock_actual: compra.cantidad,
+                stock_minimo: 0,
+                precio_unitario: compra.precio_unitario,
+                createdAt: new Date(),
+              };
+              if (compra.proveedor) insumoData.proveedor = compra.proveedor;
+              transaction.set(insumoRef, insumoData);
+              insumoId = insumoRef.id;
+              insumoNombre = compra.nombre_insumo;
+            }
+
+            // Crear registro en GASTOS (filtrar campos undefined)
+            const gastoRef = doc(collection(db, 'GASTOS'));
+            const gastoData: any = {
+              tipo_compra: 'INSUMO',
+              tipo_gasto: 'COMPRA_INSUMO',
+              categoria: 'INVERSION',
+              fecha: compra.fecha,
+              concepto: `Compra: ${insumoNombre}`,
+              cantidad: compra.cantidad,
+              precio_unitario: compra.precio_unitario,
+              total: compra.total,
+              metodo_pago: compra.metodo_pago || 'EFECTIVO',
+              insumo_id: insumoId,
+              fecha_creacion: new Date(),
+            };
+            if (compra.proveedor) gastoData.proveedor = compra.proveedor;
+            if (compra.observaciones) gastoData.observaciones = compra.observaciones;
+            transaction.set(gastoRef, gastoData);
+
+            result = { id: gastoRef.id, insumo_id: insumoId, gasto_id: gastoRef.id };
+          }
+        });
+
+        return { success: true, data: result };
+      } else {
+        // Guardar localmente para sincronizar después
+        await this.savePendingRecord('compras', compra);
+        return { success: true, data: compra, offline: true };
+      }
+    } catch (error: any) {
+      if (error.message.includes('Failed to fetch') || error.message.includes('Network')) {
+        // Guardar localmente si hay error de red
+        await this.savePendingRecord('compras', compra);
+        return { success: true, data: compra, offline: true, isNetworkError: true };
+      }
+      return { success: false, error: error.message };
+    }
+  }
+
+  async getCompras(loteId?: string): Promise<ApiResponse<any[]>> {
+    try {
+      let querySnapshot;
+      
+      if (loteId) {
+        // Para un lote específico, buscar compras de ese lote
+        const q = query(
+          collection(db, 'GASTOS'),
+          where('lote_id', '==', loteId),
+          where('tipo_gasto', '==', 'COMPRA_LOTE'),
+          orderBy('fecha', 'desc')
+        );
+        querySnapshot = await getDocs(q);
+      } else {
+        // Para todas las compras, obtener todos los gastos y filtrar
+        // (evita problemas con índices compuestos en Firestore)
+        const q = query(
+          collection(db, 'GASTOS'),
+          orderBy('fecha', 'desc')
+        );
+        querySnapshot = await getDocs(q);
+      }
+      
+      // Filtrar solo compras (lotes e insumos)
+      const compras = querySnapshot.docs
+        .map(doc => ({ id: doc.id, ...doc.data() }))
+        .filter((item: any) => {
+          const tipoGasto = item.tipo_gasto;
+          return tipoGasto === 'COMPRA_LOTE' || tipoGasto === 'COMPRA_INSUMO';
+        });
+      
+      return { success: true, data: compras };
+    } catch (error: any) {
+      console.error('Error en getCompras:', error);
+      return { success: false, error: error.message };
+    }
+  }
+
+  async deleteCompra(id: string): Promise<ApiResponse<any>> {
+    try {
+      await runTransaction(db, async (transaction) => {
+        const gastoRef = doc(db, 'GASTOS', id);
+        const gastoDoc = await transaction.get(gastoRef);
+
+        if (!gastoDoc.exists()) {
+          throw new Error('Registro de compra no encontrado');
+        }
+
+        const data = gastoDoc.data();
+
+        if (data.tipo_gasto === 'COMPRA_LOTE' && data.lote_id) {
+          // 1. Eliminar el lote asociado
+          const loteRef = doc(db, 'LOTE', data.lote_id);
+          transaction.delete(loteRef);
+        } else if (data.tipo_gasto === 'COMPRA_INSUMO' && data.insumo_id) {
+          // 2. Revertir stock del insumo
+          const insumoRef = doc(db, 'INSUMO', data.insumo_id);
+          const insumoDoc = await transaction.get(insumoRef);
+          if (insumoDoc.exists()) {
+            const stockActual = insumoDoc.data().stock_actual || 0;
+            transaction.update(insumoRef, {
+              stock_actual: stockActual - Number(data.cantidad)
+            });
+          }
+        }
+
+        // 3. Eliminar el registro de gasto
+        transaction.delete(gastoRef);
+      });
+
+      return { success: true };
+    } catch (error: any) {
+      return { success: false, error: error.message };
+    }
+  }
+
+  async updateCompra(id: string, compra: any): Promise<ApiResponse<any>> {
+    try {
+      await runTransaction(db, async (transaction) => {
+        const gastoRef = doc(db, 'GASTOS', id);
+        const gastoDoc = await transaction.get(gastoRef);
+
+        if (!gastoDoc.exists()) {
+          throw new Error('Registro de compra no encontrado');
+        }
+
+        const dataAnterior = gastoDoc.data();
+
+        if (dataAnterior.tipo_gasto === 'COMPRA_LOTE' && dataAnterior.lote_id) {
+          // 1. Actualizar el lote asociado
+          const loteRef = doc(db, 'LOTE', dataAnterior.lote_id);
+          transaction.update(loteRef, {
+            nombre: compra.nombre_lote,
+            tipo_ave: compra.tipo_ave,
+            poblacion_inicial: compra.poblacion_inicial,
+            poblacion_actual: compra.poblacion_inicial, // Se asume que si se edita la compra, se resetea la población
+            precio_compra_unitario: compra.precio_compra_unitario,
+            fecha_ingreso: compra.fecha,
+          });
+        } else if (dataAnterior.tipo_gasto === 'COMPRA_INSUMO' && dataAnterior.insumo_id) {
+          // 2. Ajustar stock del insumo
+          const insumoRef = doc(db, 'INSUMO', dataAnterior.insumo_id);
+          const insumoDoc = await transaction.get(insumoRef);
+          
+          if (insumoDoc.exists()) {
+            const stockActual = insumoDoc.data().stock_actual || 0;
+            // Revertir anterior y aplicar nuevo
+            const nuevoStock = stockActual - Number(dataAnterior.cantidad) + Number(compra.cantidad);
+            transaction.update(insumoRef, {
+              stock_actual: nuevoStock,
+              precio_unitario: compra.precio_unitario
+            });
+          }
+        }
+
+        // 3. Actualizar el registro de gasto
+        const gastoData: any = {
+          fecha: compra.fecha,
+          concepto: compra.tipo_compra === 'LOTE' 
+            ? `Compra de lote: ${compra.nombre_lote}` 
+            : `Compra: ${compra.nombre_insumo || dataAnterior.concepto.replace('Compra: ', '')}`,
+          cantidad: compra.tipo_compra === 'LOTE' ? compra.poblacion_inicial : compra.cantidad,
+          precio_unitario: compra.tipo_compra === 'LOTE' ? compra.precio_compra_unitario : compra.precio_unitario,
+          total: compra.total,
+          metodo_pago: compra.metodo_pago,
+          proveedor: compra.proveedor || null,
+          observaciones: compra.observaciones || null,
+        };
+
+        transaction.update(gastoRef, gastoData);
+      });
+
+      return { success: true };
     } catch (error: any) {
       return { success: false, error: error.message };
     }
@@ -436,8 +765,9 @@ class ApiService {
 
         const loteData = loteDoc.data();
         const poblacionActual = loteData.poblacion_actual ?? loteData.poblacion_inicial;
+        const esVentaAves = venta.tipo_producto === 'AVES';
 
-        if (venta.cantidad > poblacionActual) {
+        if (esVentaAves && venta.cantidad > poblacionActual) {
           throw new Error(`No hay suficientes aves. Disponibles: ${poblacionActual}`);
         }
 
@@ -449,17 +779,19 @@ class ApiService {
           fecha_creacion: new Date().toISOString()
         });
 
-        // 3. Actualizar población
-        const nuevaPoblacion = poblacionActual - venta.cantidad;
-        const updateData: any = { poblacion_actual: nuevaPoblacion };
+        // 3. Actualizar población solo si es venta de aves
+        if (esVentaAves) {
+          const nuevaPoblacion = poblacionActual - venta.cantidad;
+          const updateData: any = { poblacion_actual: nuevaPoblacion };
 
-        // 4. Finalizar si llega a 0
-        if (nuevaPoblacion === 0) {
-          updateData.activo = false;
-          updateData.fecha_finalizacion = new Date().toISOString();
+          // 4. Finalizar si llega a 0
+          if (nuevaPoblacion === 0) {
+            updateData.activo = false;
+            updateData.fecha_finalizacion = new Date().toISOString();
+          }
+
+          transaction.update(loteRef, updateData);
         }
-
-        transaction.update(loteRef, updateData);
       });
 
       return { success: true, data: venta };
@@ -588,6 +920,16 @@ async createRegistroDiario(datos: {
   fecha: string;
   mortalidad_dia: number;
   alimento_consumido_kg: number;
+  huevos_totales: number;
+  desglose_huevos?: {
+    jumbo?: number;
+    aaa?: number;
+    aa?: number;
+    a?: number;
+    b?: number;
+    c?: number;
+    sucios_rotos?: number;
+  };
   observaciones: string | null;
 }): Promise<ApiResponse<any>> {
   try {
@@ -980,31 +1322,31 @@ async deleteRegistroDiario(id: string): Promise<ApiResponse<any>> {
       const gastosSnap = await getDocs(collection(db, 'GASTOS'));
       
       let gastosOperativos = 0;      // Nómina, servicios, aseo, arriendo
-      let inversionInsumos = 0;      // Compras que van a bodega
+      let inversionLotes = 0;        // Compras de lotes
+      let inversionInsumos = 0;      // Compras de insumos que van a bodega
       let consumosRegistrados = 0;   // Solo para referencia (NO suma a egresos de caja)
 
       gastosSnap.docs.forEach(doc => {
         const data = doc.data();
         const total = data.total || 0;
+        const tipoGasto = data.tipo_gasto;
         
-        switch (data.tipo_gasto) {
-          case 'GASTO_OPERATIVO':
-            gastosOperativos += total;
-            break;
-          case 'COMPRA_INSUMO':
-            inversionInsumos += total;
-            break;
-          case 'CONSUMO_LOTE':
-            consumosRegistrados += total;  // NO se suma a egresos de caja
-            break;
-          default:
-            // Por defecto, si no tiene tipo, lo tratamos como operativo para no perder datos
-            gastosOperativos += total;
-            break;
+        if (tipoGasto === 'COMPRA_LOTE') {
+          inversionLotes += total;
+        } else if (tipoGasto === 'COMPRA_INSUMO') {
+          inversionInsumos += total;
+        } else if (tipoGasto === 'CONSUMO_LOTE') {
+          consumosRegistrados += total;  // NO se suma a egresos de caja
+        } else if (tipoGasto === 'GASTO_OPERATIVO' || 
+                   ['NOMINA', 'SERVICIOS_PUBLICOS', 'ARRIENDO', 'MANTENIMIENTO', 'ASEO', 'OTRO'].includes(tipoGasto)) {
+          gastosOperativos += total;
+        } else if (!tipoGasto) {
+          // Por defecto, si no tiene tipo, lo tratamos como operativo para no perder datos antiguos
+          gastosOperativos += total;
         }
       });
 
-      const totalEgresosCaja = gastosOperativos + inversionInsumos;
+      const totalEgresosCaja = gastosOperativos + inversionLotes + inversionInsumos;
 
       // 3. Obtener inventario actual (Activos)
       const insumosSnap = await getDocs(collection(db, 'INSUMO'));
@@ -1089,6 +1431,7 @@ async deleteRegistroDiario(id: string): Promise<ApiResponse<any>> {
             total_ingresos_contado: totalIngresosContado,
             cuentas_por_cobrar: cuentasPorCobrar,
             gastos_operativos: gastosOperativos,
+            inversion_lotes: inversionLotes,
             inversion_insumos: inversionInsumos,
             perdida_mortalidad: perdidaMortalidad,
             total_egresos_caja: totalEgresosCaja,
@@ -1128,17 +1471,36 @@ async deleteRegistroDiario(id: string): Promise<ApiResponse<any>> {
       const lotes = lotesSnapshot.docs.map(d => ({ id: d.id, ...d.data() }));
 
       // Obtener registros recientes para producción y mortalidad
-      // Nota: En una app real, optimizaríamos estas queries para no traer todo
       const registrosSnapshot = await getDocs(collection(db, 'REGISTRO_DIARIO_PRODUCCION'));
       const registros = registrosSnapshot.docs.map(d => d.data());
+
+      // Calcular el inicio del día local en formato ISO para filtrado preciso
+      const ahora = new Date();
+      const inicioHoyLocal = new Date(ahora.getFullYear(), ahora.getMonth(), ahora.getDate());
+      const inicioHoyIso = inicioHoyLocal.toISOString();
+      const hoyPrefijo = ahora.toISOString().split('T')[0]; // Para compatibilidad con startsWith
+
+      // Obtener ventas de hoy para el resumen financiero rápido
+      const ventasSnapshot = await getDocs(query(collection(db, 'VENTAS'), where('fecha', '>=', inicioHoyIso)));
+      const ventasHoy = ventasSnapshot.docs
+        .map(d => d.data())
+        .filter((v: any) => v.fecha && v.fecha >= inicioHoyIso)
+        .reduce((sum: number, v: any) => {
+          // Si es crédito, solo sumamos el abono inicial que entró hoy
+          // Si es contado, sumamos el total
+          if (v.forma_pago === 'CREDITO') {
+            return sum + (Number(v.abono) || 0);
+          } else {
+            return sum + (Number(v.total) || 0);
+          }
+        }, 0);
 
       // Calcular KPIs
       const totalAves = lotes.reduce((sum: number, l: any) => sum + (l.poblacion_actual || 0), 0);
       
       // Producción hoy
-      const hoyIso = new Date().toISOString().split('T')[0];
       const produccionHoy = registros
-        .filter((r: any) => r.fecha && r.fecha.startsWith(hoyIso))
+        .filter((r: any) => r.fecha && r.fecha >= inicioHoyIso)
         .reduce((sum: number, r: any) => sum + (r.huevos_totales || 0), 0);
 
       // Calcular mortalidad de los últimos 7 días
@@ -1150,13 +1512,89 @@ async deleteRegistroDiario(id: string): Promise<ApiResponse<any>> {
         .filter((r: any) => r.fecha && r.fecha >= sieteDiasAtrasIso)
         .reduce((sum: number, r: any) => sum + (r.mortalidad_dia || 0), 0);
 
+      // Obtener gastos de hoy para el resumen financiero
+      const gastosSnapshot = await getDocs(query(collection(db, 'GASTOS'), where('fecha', '>=', inicioHoyIso)));
+      const gastosHoyRaw = gastosSnapshot.docs.map(d => d.data());
+      
+      let gastosOperativosHoy = 0;
+      let inversionesHoy = 0;
+      
+      gastosHoyRaw.forEach((g: any) => {
+        if (g.tipo_gasto === 'COMPRA_LOTE') {
+          const lote = lotes.find(l => l.id === g.lote_id);
+          if (lote && lote.tipo_ave === 'PONEDORA') {
+            inversionesHoy += (Number(g.total) || 0);
+          } else {
+            gastosOperativosHoy += (Number(g.total) || 0);
+          }
+        } else {
+          gastosOperativosHoy += (Number(g.total) || 0);
+        }
+      });
+
       return {
         success: true,
         data: {
           totalAves,
           lotesActivos: lotes.length,
           produccionHoy,
-          mortalidadSemanal
+          mortalidadSemanal,
+          ventasHoy,
+          gastosOperativosHoy,
+          inversionesHoy
+        }
+      };
+    } catch (error: any) {
+      console.error('Error en getGlobalKPIs:', error);
+      return { success: false, error: error.message };
+    }
+  }
+
+  async getLoteProfitability(loteId: string): Promise<ApiResponse<any>> {
+    try {
+      const loteRef = doc(db, 'LOTE', loteId);
+      const loteSnap = await getDoc(loteRef);
+      if (!loteSnap.exists()) throw new Error('Lote no encontrado');
+      const lote = loteSnap.data();
+
+      const gastosSnapshot = await getDocs(query(collection(db, 'GASTOS'), where('lote_id', '==', loteId)));
+      const gastos = gastosSnapshot.docs.map(d => d.data());
+      
+      const ventasSnapshot = await getDocs(query(collection(db, 'VENTAS'), where('lote_id', '==', loteId)));
+      const ventas = ventasSnapshot.docs.map(d => d.data());
+
+      const inversionInicial = gastos
+        .filter(g => g.tipo_gasto === 'COMPRA_LOTE')
+        .reduce((sum, g) => sum + (Number(g.total) || 0), 0);
+        
+      const gastosOperativos = gastos
+        .filter(g => g.tipo_gasto !== 'COMPRA_LOTE')
+        .reduce((sum, g) => sum + (Number(g.total) || 0), 0);
+
+      const ingresosAcumulados = ventas.reduce((sum, v) => {
+        if (v.forma_pago === 'CREDITO') {
+          return sum + (Number(v.abono) || 0);
+        }
+        return sum + (Number(v.total) || 0);
+      }, 0);
+
+      const totalInvertido = inversionInicial + gastosOperativos;
+      const porcentajeRecuperado = totalInvertido > 0 
+        ? Math.min(100, (ingresosAcumulados / totalInvertido) * 100) 
+        : 0;
+
+      return {
+        success: true,
+        data: {
+          loteId,
+          nombre: lote.nombre,
+          tipoAve: lote.tipo_ave,
+          inversionInicial,
+          gastosOperativos,
+          totalInvertido,
+          ingresosAcumulados,
+          porcentajeRecuperado,
+          saldo: ingresosAcumulados - totalInvertido
         }
       };
     } catch (error: any) {

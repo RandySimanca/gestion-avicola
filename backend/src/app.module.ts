@@ -15,6 +15,7 @@ import { VentasModule } from './ventas/ventas.module';
 import { ConsumoInsumosModule } from './consumo-insumos/consumo-insumos.module';
 import { ReportesModule } from './reportes/reportes.module';
 import { GastosModule } from './gastos/gastos.module';
+import { ComprasModule } from './compras/compras.module';
 
 @Module({
   imports: [
@@ -34,6 +35,7 @@ import { GastosModule } from './gastos/gastos.module';
     ConsumoInsumosModule,
     ReportesModule,
     GastosModule,
+    ComprasModule,
   ],
   controllers: [AppController],
   providers: [AppService],

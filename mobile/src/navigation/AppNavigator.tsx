@@ -32,11 +32,13 @@ import EditInsumoScreen from '../screens/EditInsumoScreen';
 import EditLoteScreen from '../screens/EditLoteScreen';
 import GlobalSummaryScreen from '../screens/GlobalSummaryScreen';
 import GastosScreen from '../screens/GastosScreen';
+import ComprasScreen from '../screens/ComprasScreen';
 import RegistrosMortalidadScreen from '../screens/RegistrosMortalidadScreen';
 import EditarMortalidadScreen from '../screens/EditarMortalidadScreen';
 import EditarVentaScreen from '../screens/EditarVentaScreen';
 import EditGalponScreen from '../screens/EditGalponScreen';
 import EditGastoScreen from '../screens/EditGastoScreen';
+import EditCompraScreen from '../screens/EditCompraScreen';
 
 export type AuthStackParamList = {
     Login: undefined;
@@ -66,11 +68,13 @@ export type RootDrawerParamList = {
     EditLote: { loteId: string };
     GlobalSummary: undefined;
     Gastos: undefined;
+    Compras: undefined;
     RegistrosMortalidad: undefined;
     EditarMortalidad: { registro: any };
     EditarVenta: { venta: any };
     EditGalpon: { galponId: string };
     EditGasto: { gastoId: string };
+    EditCompra: { compraId: string };
 };
 
 const Stack = createNativeStackNavigator<AuthStackParamList>();
@@ -127,6 +131,38 @@ function MainDrawer() {
                 }}
             />
             <Drawer.Screen
+                name="Insumos"
+                component={InsumosScreen}
+                options={{
+                    title: 'Inventario',
+                    drawerIcon: ({ color, size }) => <Ionicons name="cube-outline" size={size} color={color} />
+                }}
+            />
+            <Drawer.Screen
+                name="Ventas"
+                component={VentasScreen}
+                options={{
+                    title: 'Ventas',
+                    drawerIcon: ({ color, size }) => <Ionicons name="cart-outline" size={size} color={color} />
+                }}
+            />
+            <Drawer.Screen
+                name="Compras"
+                component={ComprasScreen}
+                options={{
+                    title: 'Compras',
+                    drawerIcon: ({ color, size }) => <Ionicons name="cart-outline" size={size} color={color} />
+                }}
+            />
+            <Drawer.Screen
+                name="RegistrosHistory"
+                component={RegistrosHistoryScreen}
+                options={{
+                    title: 'Historial',
+                    drawerIcon: ({ color, size }) => <Ionicons name="time-outline" size={size} color={color} />
+                }}
+            />
+            <Drawer.Screen
                 name="Lotes"
                 component={LotesScreen}
                 options={{
@@ -151,19 +187,35 @@ function MainDrawer() {
                 }}
             />
             <Drawer.Screen
-                name="Insumos"
-                component={InsumosScreen}
+                name="AdminUsuarios"
+                component={AdminUsuariosScreen}
                 options={{
-                    title: 'Inventario',
-                    drawerIcon: ({ color, size }) => <Ionicons name="cube-outline" size={size} color={color} />
+                    title: 'Usuarios',
+                    drawerIcon: ({ color, size }) => <Ionicons name="people-outline" size={size} color={color} />
                 }}
             />
             <Drawer.Screen
-                name="RegistrosHistory"
-                component={RegistrosHistoryScreen}
+                name="Gastos"
+                component={GastosScreen}
                 options={{
-                    title: 'Historial',
-                    drawerIcon: ({ color, size }) => <Ionicons name="time-outline" size={size} color={color} />
+                    title: 'Gastos Operativos',
+                    drawerIcon: ({ color, size }) => <Ionicons name="cash-outline" size={size} color={color} />
+                }}
+            />
+            <Drawer.Screen
+                name="GlobalSummary"
+                component={GlobalSummaryScreen}
+                options={{
+                    title: 'Resumen Global',
+                    drawerIcon: ({ color, size }) => <Ionicons name="globe-outline" size={size} color={color} />
+                }}
+            />
+            <Drawer.Screen
+                name="AccountingSummary"
+                component={AccountingSummaryScreen}
+                options={{
+                    title: 'Resumen Contable',
+                    drawerIcon: ({ color, size }) => <Ionicons name="stats-chart-outline" size={size} color={color} />
                 }}
             />
             <Drawer.Screen
@@ -174,6 +226,7 @@ function MainDrawer() {
                     drawerIcon: ({ color, size }) => <Ionicons name="medkit-outline" size={size} color={color} />
                 }}
             />
+
             {/* Pantallas que no están en el menú principal pero necesitan estar en el stack/drawer */}
             <Drawer.Screen
                 name="Mortalidad"
@@ -211,14 +264,6 @@ function MainDrawer() {
                 options={{ drawerItemStyle: { display: 'none' }, title: 'Consumo' }}
             />
             <Drawer.Screen
-                name="AdminUsuarios"
-                component={AdminUsuariosScreen}
-                options={{
-                    title: 'Usuarios',
-                    drawerIcon: ({ color, size }) => <Ionicons name="people-outline" size={size} color={color} />
-                }}
-            />
-            <Drawer.Screen
                 name="CreateInsumo"
                 component={CreateInsumoScreen}
                 options={{
@@ -235,14 +280,6 @@ function MainDrawer() {
                 }}
             />
             <Drawer.Screen
-                name="Ventas"
-                component={VentasScreen}
-                options={{
-                    title: 'Ventas',
-                    drawerIcon: ({ color, size }) => <Ionicons name="cart-outline" size={size} color={color} />
-                }}
-            />
-            <Drawer.Screen
                 name="CreateVenta"
                 component={CreateVentaScreen}
                 options={{
@@ -256,14 +293,6 @@ function MainDrawer() {
                 options={{
                     title: 'Editar Venta',
                     drawerItemStyle: { display: 'none' },
-                }}
-            />
-            <Drawer.Screen
-                name="AccountingSummary"
-                component={AccountingSummaryScreen}
-                options={{
-                    title: 'Resumen Contable',
-                    drawerIcon: ({ color, size }) => <Ionicons name="stats-chart-outline" size={size} color={color} />
                 }}
             />
             <Drawer.Screen
@@ -299,19 +328,11 @@ function MainDrawer() {
                 }}
             />
             <Drawer.Screen
-                name="GlobalSummary"
-                component={GlobalSummaryScreen}
+                name="EditCompra"
+                component={EditCompraScreen}
                 options={{
-                    title: 'Resumen Global',
-                    drawerIcon: ({ color, size }) => <Ionicons name="globe-outline" size={size} color={color} />
-                }}
-            />
-            <Drawer.Screen
-                name="Gastos"
-                component={GastosScreen}
-                options={{
-                    title: 'Gastos e Inversión',
-                    drawerIcon: ({ color, size }) => <Ionicons name="cash-outline" size={size} color={color} />
+                    title: 'Editar Compra',
+                    drawerItemStyle: { display: 'none' },
                 }}
             />
         </Drawer.Navigator>

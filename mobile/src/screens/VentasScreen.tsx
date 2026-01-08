@@ -52,9 +52,13 @@ export default function VentasScreen({ navigation }: Props) {
     };
 
     const handleDeleteVenta = (venta: any) => {
+        const esHuevo = venta.tipo_producto === 'HUEVOS';
+        const unidad = esHuevo ? 'huevos' : 'aves';
+        const mensajePoblacion = esHuevo ? '' : '\n\nLa población del lote será restaurada automáticamente.';
+
         Alert.alert(
             'Confirmar Eliminación',
-            `¿Está seguro de eliminar la venta de ${venta.cantidad} aves a ${venta.cliente}?\n\nLa población del lote será restaurada automáticamente.`,
+            `¿Está seguro de eliminar la venta de ${venta.cantidad} ${unidad} a ${venta.cliente}?${mensajePoblacion}`,
             [
                 {
                     text: 'Cancelar',
@@ -157,7 +161,7 @@ export default function VentasScreen({ navigation }: Props) {
                 </View>
                 <View style={styles.row}>
                     <Text style={styles.label}>Cantidad:</Text>
-                    <Text style={styles.value}>{item.cantidad} aves</Text>
+                    <Text style={styles.value}>{item.cantidad} {item.tipo_producto === 'HUEVOS' ? 'huevos' : 'aves'}</Text>
                 </View>
                 <View style={styles.row}>
                     <Text style={styles.label}>Precio Unit:</Text>

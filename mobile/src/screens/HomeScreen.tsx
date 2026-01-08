@@ -23,7 +23,10 @@ export default function HomeScreen({ navigation }: Props) {
         totalAves: 0,
         mortalidadSemanal: 0,
         produccionHoy: 0,
-        lotesActivos: 0
+        lotesActivos: 0,
+        ventasHoy: 0,
+        gastosOperativosHoy: 0,
+        inversionesHoy: 0
     });
 
     useEffect(() => {
@@ -44,7 +47,10 @@ export default function HomeScreen({ navigation }: Props) {
                     totalAves: response.data.totalAves,
                     mortalidadSemanal: response.data.mortalidadSemanal,
                     produccionHoy: response.data.produccionHoy,
-                    lotesActivos: response.data.lotesActivos
+                    lotesActivos: response.data.lotesActivos,
+                    ventasHoy: response.data.ventasHoy || 0,
+                    gastosOperativosHoy: response.data.gastosOperativosHoy || 0,
+                    inversionesHoy: response.data.inversionesHoy || 0
                 });
             } else {
                 // Fallback a datos cacheados si falla el API (offline)
@@ -88,13 +94,27 @@ export default function HomeScreen({ navigation }: Props) {
         }
     };
 
-    const StatCard = ({ title, value, unit, color }: any) => (
+    const formatCurrency = (amount: number) => {
+        return new Intl.NumberFormat('es-CO', {
+            style: 'currency',
+            currency: 'COP',
+            maximumFractionDigits: 0,
+        }).format(amount);
+    };
+
+    const StatCard = ({ title, value, unit, color, secondaryValue, secondaryUnit }: any) => (
         <View style={[styles.statCard, { borderLeftColor: color }]}>
             <Text style={styles.statTitle}>{title}</Text>
             <View style={styles.statValueContainer}>
                 <Text style={styles.statValue}>{value}</Text>
                 {unit && <Text style={styles.statUnit}>{unit}</Text>}
             </View>
+            {secondaryValue !== undefined && (
+                <View style={styles.secondaryValueContainer}>
+                    <Text style={styles.secondaryValue}>{secondaryValue}</Text>
+                    {secondaryUnit && <Text style={styles.secondaryUnit}>{secondaryUnit}</Text>}
+                </View>
+            )}
         </View>
     );
 
@@ -125,10 +145,22 @@ export default function HomeScreen({ navigation }: Props) {
                 <View style={styles.section}>
                     <Text style={styles.sectionTitle}>Resumen del Negocio</Text>
                     <View style={styles.statsGrid}>
-                        <StatCard title="Población Total" value={stats.totalAves} unit="aves" color="#3498db" />
-                        <StatCard title="Lotes Activos" value={stats.lotesActivos} color="#2ecc71" />
+                        <StatCard
+                            title="Utilidad Operativa"
+                            value={formatCurrency(stats.ventasHoy - stats.gastosOperativosHoy)}
+                            color="#2ecc71"
+                            secondaryValue={`Ventas: ${formatCurrency(stats.ventasHoy)}`}
+                        />
+                        <StatCard
+                            title="Inversión Hoy"
+                            value={formatCurrency(stats.inversionesHoy)}
+                            color="#3498db"
+                            secondaryValue="Ponedoras"
+                        />
+                        <StatCard title="Población Total" value={stats.totalAves} unit="aves" color="#9b59b6" />
                         <StatCard title="Producción Hoy" value={stats.produccionHoy} unit="huevos" color="#f1c40f" />
                         <StatCard title="Mortalidad (7d)" value={stats.mortalidadSemanal} unit="aves" color="#e74c3c" />
+                        <StatCard title="Lotes Activos" value={stats.lotesActivos} color="#95a5a6" />
                     </View>
                 </View>
 
@@ -250,6 +282,21 @@ const styles = StyleSheet.create({
         fontSize: 12,
         color: '#95a5a6',
         marginLeft: 4,
+    },
+    secondaryValueContainer: {
+        flexDirection: 'row',
+        alignItems: 'baseline',
+        marginTop: 2,
+    },
+    secondaryValue: {
+        fontSize: 14,
+        color: '#27ae60',
+        fontWeight: '600',
+    },
+    secondaryUnit: {
+        fontSize: 10,
+        color: '#95a5a6',
+        marginLeft: 2,
     },
     actionsGrid: {
         flexDirection: 'row',

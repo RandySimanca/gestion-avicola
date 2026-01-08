@@ -9,39 +9,56 @@ export class GastosService {
 
   async create(createGastoDto: CreateGastoDto) {
     const firestore = this.firebaseService.getFirestore();
-    
-    // Si es una compra de insumo, actualizar el stock
-    if (createGastoDto.insumo_id && createGastoDto.tipo_gasto === 'COMPRA_INSUMO') {
-      const insumoRef = firestore.collection('INSUMO').doc(createGastoDto.insumo_id);
-      const insumoDoc = await insumoRef.get();
-      
-      if (insumoDoc.exists) {
-        const insumoData = insumoDoc.data() as any;
-        const nuevoStock = (insumoData.stock_actual || 0) + createGastoDto.cantidad;
-        await insumoRef.update({ 
-          stock_actual: nuevoStock,
-          precio_unitario: createGastoDto.precio_unitario // Actualizar precio con el de la última compra
-        });
-      }
-    }
 
-    const data = { ...createGastoDto, fecha_creacion: new Date() };
+    // Crear registro de gasto operativo
+    const data = {
+      ...createGastoDto,
+      categoria: 'GASTO', // Todos los gastos operativos son GASTO (no INVERSION)
+      tipo_gasto: createGastoDto.tipo_gasto, // NOMINA, SERVICIOS_PUBLICOS, etc.
+      fecha_creacion: new Date(),
+    };
+
     const docRef = await firestore.collection('GASTOS').add(data);
     return { id: docRef.id, ...data };
   }
 
   async findAll() {
-    const snapshot = await this.firebaseService.getFirestore().collection('GASTOS').orderBy('fecha', 'desc').get();
-    return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    // Obtener todos los gastos y filtrar solo los operativos
+    const snapshot = await this.firebaseService.getFirestore()
+      .collection('GASTOS')
+      .orderBy('fecha', 'desc')
+      .get();
+    
+    // Filtrar solo gastos operativos (excluir compras y consumos)
+    return snapshot.docs
+      .map(doc => ({ id: doc.id, ...doc.data() }))
+      .filter((gasto: any) => {
+        const tipoGasto = gasto.tipo_gasto;
+        return tipoGasto && 
+               tipoGasto !== 'COMPRA_LOTE' && 
+               tipoGasto !== 'COMPRA_INSUMO' && 
+               tipoGasto !== 'CONSUMO_LOTE';
+      });
   }
 
   async findByLote(loteId: string) {
+    // Obtener gastos asociados a un lote y filtrar solo los operativos
     const snapshot = await this.firebaseService.getFirestore()
       .collection('GASTOS')
       .where('lote_id', '==', loteId)
       .orderBy('fecha', 'desc')
       .get();
-    return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    
+    // Filtrar solo gastos operativos
+    return snapshot.docs
+      .map(doc => ({ id: doc.id, ...doc.data() }))
+      .filter((gasto: any) => {
+        const tipoGasto = gasto.tipo_gasto;
+        return tipoGasto && 
+               tipoGasto !== 'COMPRA_LOTE' && 
+               tipoGasto !== 'COMPRA_INSUMO' && 
+               tipoGasto !== 'CONSUMO_LOTE';
+      });
   }
 
   async findOne(id: string) {

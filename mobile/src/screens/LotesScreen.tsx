@@ -124,7 +124,23 @@ export default function LotesScreen({ navigation }: Props) {
                     <Ionicons name="home-outline" size={16} color="#7f8c8d" />
                     <Text style={styles.detailText}>Galpón: <Text style={styles.boldDetail}>{item.galpon_nombre || 'N/A'}</Text></Text>
                 </View>
+                <View style={styles.detailRow}>
+                    <Ionicons name="skull-outline" size={16} color="#e74c3c" />
+                    <Text style={styles.detailText}>Mortalidad Acumulada: <Text style={[styles.boldDetail, { color: '#e74c3c' }]}>{item.mortalidad_acumulada || 0} aves</Text></Text>
+                </View>
             </View>
+
+            {item.tipo_ave === 'PONEDORA' && (
+                <View style={styles.roiContainer}>
+                    <View style={styles.roiHeader}>
+                        <Text style={styles.roiLabel}>Recuperación de Inversión</Text>
+                        <Text style={styles.roiValue}>{Math.round(item.roi_porcentaje || 0)}%</Text>
+                    </View>
+                    <View style={styles.roiBarBackground}>
+                        <View style={[styles.roiBarForeground, { width: `${item.roi_porcentaje || 0}%` }]} />
+                    </View>
+                </View>
+            )}
             {isAdmin && (
                 <View style={styles.actions}>
                     {item.activo && (
@@ -355,5 +371,39 @@ const styles = StyleSheet.create({
         color: '#27ae60',
         fontWeight: 'bold',
         marginLeft: 4,
+    },
+    roiContainer: {
+        marginTop: 15,
+        paddingTop: 10,
+        borderTopWidth: 1,
+        borderTopColor: '#eee',
+    },
+    roiHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: 5,
+    },
+    roiLabel: {
+        fontSize: 12,
+        fontWeight: 'bold',
+        color: '#7f8c8d',
+        textTransform: 'uppercase',
+    },
+    roiValue: {
+        fontSize: 14,
+        fontWeight: 'bold',
+        color: '#27ae60',
+    },
+    roiBarBackground: {
+        height: 8,
+        backgroundColor: '#e8f5e9',
+        borderRadius: 4,
+        overflow: 'hidden',
+    },
+    roiBarForeground: {
+        height: '100%',
+        backgroundColor: '#2ecc71',
+        borderRadius: 4,
     },
 });

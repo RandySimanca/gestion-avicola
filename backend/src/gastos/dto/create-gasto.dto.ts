@@ -1,39 +1,45 @@
-import { IsString, IsNumber, IsOptional, IsEnum, Min, IsDateString } from 'class-validator';
+import { IsString, IsNumber, IsOptional, IsEnum, Min, IsDateString, IsNotEmpty } from 'class-validator';
 
-export enum CategoriaGasto {
-  INVERSION = 'INVERSION',
-  GASTO = 'GASTO',
+export enum TipoGastoOperativo {
+  NOMINA = 'NOMINA',
+  SERVICIOS_PUBLICOS = 'SERVICIOS_PUBLICOS',
+  ARRIENDO = 'ARRIENDO',
+  MANTENIMIENTO = 'MANTENIMIENTO',
+  ASEO = 'ASEO',
+  OTRO = 'OTRO',
 }
 
 export class CreateGastoDto {
-  @IsString()
-  @IsOptional()
-  lote_id?: string;
-
   @IsDateString()
+  @IsNotEmpty({ message: 'La fecha es requerida' })
   fecha: string;
 
   @IsString()
+  @IsNotEmpty({ message: 'El concepto es requerido' })
   concepto: string;
 
-  @IsEnum(CategoriaGasto)
-  categoria: CategoriaGasto;
+  @IsEnum(TipoGastoOperativo)
+  @IsNotEmpty({ message: 'El tipo de gasto operativo es requerido' })
+  tipo_gasto: TipoGastoOperativo;
+
+  @IsString()
+  @IsOptional()
+  lote_id?: string; // Opcional: asociar gasto a un lote específico
 
   @IsNumber()
   @Min(0)
+  @IsNotEmpty({ message: 'La cantidad es requerida' })
   cantidad: number;
 
   @IsNumber()
   @Min(0)
+  @IsNotEmpty({ message: 'El precio unitario es requerido' })
   precio_unitario: number;
 
   @IsNumber()
   @Min(0)
+  @IsNotEmpty({ message: 'El total es requerido' })
   total: number;
-
-  @IsString()
-  @IsOptional()
-  observaciones?: string;
 
   @IsString()
   @IsOptional()
@@ -45,9 +51,5 @@ export class CreateGastoDto {
 
   @IsString()
   @IsOptional()
-  insumo_id?: string;
-
-  @IsString()
-  @IsOptional()
-  tipo_gasto?: 'COMPRA_INSUMO' | 'GASTO_OPERATIVO' | 'CONSUMO_LOTE';
+  observaciones?: string;
 }

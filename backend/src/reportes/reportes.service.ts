@@ -76,14 +76,22 @@ export class ReportesService {
     const totalIngresos = ventas.reduce((sum, v) => sum + (v.total || 0), 0);
 
     // 3. Obtener todos los gastos (Salidas de Dinero Reales)
-    // Solo contamos COMPRA_INSUMO y GASTO_OPERATIVO (lo que salió de caja)
+    // Solo contamos COMPRA_LOTE, COMPRA_INSUMO y GASTO_OPERATIVO (lo que salió de caja)
     // El CONSUMO_LOTE no se resta de caja porque ya se restó al comprar el insumo
     const gastosSnapshot = await firestore.collection('GASTOS').get();
     const gastos = gastosSnapshot.docs.map(doc => doc.data() as any);
     
     const totalEgresosCaja = gastos
-      .filter(g => g.tipo_gasto !== 'CONSUMO_LOTE')
-      .reduce((sum, g) => sum + (g.total || 0), 0);
+      .filter((g: any) => {
+        const tipoGasto = g.tipo_gasto;
+        // Incluir compras (lotes e insumos) y gastos operativos
+        // Excluir CONSUMO_LOTE porque ya se restó al comprar el insumo
+        return tipoGasto === 'COMPRA_LOTE' || 
+               tipoGasto === 'COMPRA_INSUMO' || 
+               tipoGasto === 'GASTO_OPERATIVO' ||
+               ['NOMINA', 'SERVICIOS_PUBLICOS', 'ARRIENDO', 'MANTENIMIENTO', 'ASEO', 'OTRO'].includes(tipoGasto);
+      })
+      .reduce((sum: number, g: any) => sum + (g.total || 0), 0);
 
     // 4. Valor del Inventario (Dinero "quieto")
     const insumosSnapshot = await firestore.collection('INSUMO').get();

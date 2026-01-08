@@ -128,6 +128,7 @@ export default function GlobalSummaryScreen() {
                                 <View style={styles.divider} />
                                 <Text style={styles.subSectionTitle}>Egresos de Caja</Text>
                                 {renderRow('Gastos operativos (Nómina, servicios...)', summary.flujo_caja.gastos_operativos, '#e74c3c')}
+                                {renderRow('Compras de lotes (efectivo pagado)', summary.flujo_caja.inversion_lotes || 0, '#e74c3c')}
                                 {renderRow('Compras de insumos (efectivo pagado)', summary.flujo_caja.inversion_insumos, '#e74c3c')}
                                 <View style={styles.divider} />
                                 {renderRow('Total que salió de caja', summary.flujo_caja.total_egresos_caja, '#e74c3c')}

@@ -117,10 +117,20 @@ export default function RegistrosHistoryScreen() {
 
     const handleDelete = (item: any) => {
         const isVenta = item.tipo_registro === 'VENTA';
+        const esHuevo = isVenta && item.tipo_producto === 'HUEVOS';
         const title = isVenta ? 'Eliminar Venta' : 'Eliminar Registro';
-        const message = isVenta
-            ? `¿Estás seguro de eliminar la venta de ${item.cantidad} aves? Se restaurará la población del lote.`
-            : `¿Estás seguro de eliminar este registro?`;
+
+        let message = '';
+        if (isVenta) {
+            const unidad = esHuevo ? 'huevos' : 'aves';
+            const mensajePoblacion = esHuevo ? '' : ' Se restaurará la población del lote.';
+            message = `¿Estás seguro de eliminar la venta de ${item.cantidad} ${unidad}?${mensajePoblacion}`;
+        } else {
+            const tipo = item.mortalidad_dia > 0 ? 'Mortalidad' :
+                item.huevos_totales > 0 ? 'Postura' :
+                    item.alimento_consumido_kg > 0 ? 'Alimento' : 'Registro';
+            message = `¿Estás seguro de eliminar este registro de ${tipo}?`;
+        }
 
         Alert.alert(title, message, [
             { text: 'Cancelar', style: 'cancel' },
@@ -202,7 +212,9 @@ export default function RegistrosHistoryScreen() {
                         <>
                             <View style={[styles.row, styles.highlightedRowVenta]}>
                                 <Text style={styles.highlightedLabelVenta}>Cantidad:</Text>
-                                <Text style={styles.highlightedValueVenta}>{item.cantidad} aves</Text>
+                                <Text style={styles.highlightedValueVenta}>
+                                    {item.cantidad} {item.tipo_producto === 'HUEVOS' ? 'huevos' : 'aves'}
+                                </Text>
                             </View>
                             <View style={styles.row}>
                                 <Text style={styles.label}>Cliente:</Text>
@@ -234,10 +246,24 @@ export default function RegistrosHistoryScreen() {
                                 </View>
                             )}
                             {(activeFilter === 'TODO' || isPostura) && item.huevos_totales > 0 && (
-                                <View style={[styles.row, isPostura && styles.highlightedRow]}>
-                                    <Text style={[styles.label, isPostura && styles.highlightedLabel]}>Postura:</Text>
-                                    <Text style={[styles.value, isPostura && styles.highlightedValue]}>{item.huevos_totales} huevos</Text>
-                                </View>
+                                <>
+                                    <View style={[styles.row, isPostura && styles.highlightedRow]}>
+                                        <Text style={[styles.label, isPostura && styles.highlightedLabel]}>Postura:</Text>
+                                        <Text style={[styles.value, isPostura && styles.highlightedValue]}>{item.huevos_totales} huevos</Text>
+                                    </View>
+                                    {item.desglose_huevos && (
+                                        <View style={styles.desgloseContainer}>
+                                            {Object.entries(item.desglose_huevos).map(([size, count]: [string, any]) => (
+                                                count > 0 && (
+                                                    <View key={size} style={styles.desgloseItem}>
+                                                        <Text style={styles.desgloseLabel}>{size.toUpperCase()}:</Text>
+                                                        <Text style={styles.desgloseValue}>{count}</Text>
+                                                    </View>
+                                                )
+                                            ))}
+                                        </View>
+                                    )}
+                                </>
                             )}
                         </>
                     )}
@@ -472,5 +498,29 @@ const styles = StyleSheet.create({
         color: '#fff',
         fontSize: 10,
         fontWeight: 'bold',
+    },
+    desgloseContainer: {
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        gap: 8,
+        marginTop: 5,
+        padding: 8,
+        backgroundColor: '#f8f9fa',
+        borderRadius: 8,
+    },
+    desgloseItem: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 4,
+    },
+    desgloseLabel: {
+        fontSize: 11,
+        fontWeight: 'bold',
+        color: '#7f8c8d',
+    },
+    desgloseValue: {
+        fontSize: 11,
+        fontWeight: 'bold',
+        color: '#2c3e50',
     },
 });

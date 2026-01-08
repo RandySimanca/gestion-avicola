@@ -18,11 +18,23 @@ export default function App() {
 
   const checkForUpdates = async () => {
     try {
-      if (__DEV__) return;
+      // Verificar si Updates está habilitado
+      if (!Updates.isEnabled) {
+        console.log('Expo Updates no está habilitado');
+        return;
+      }
 
+      // En desarrollo, solo verificar si no estamos usando Expo Go
+      if (__DEV__ && !Updates.isEmbeddedLaunch) {
+        console.log('Modo desarrollo con Expo Go - OTA no disponible');
+        return;
+      }
+
+      console.log('Verificando actualizaciones OTA...');
       const update = await Updates.checkForUpdateAsync();
 
       if (update.isAvailable) {
+        console.log('Actualización disponible, descargando...');
         Alert.alert(
           'Actualización disponible',
           'Descargando la nueva versión de la aplicación...',
@@ -41,6 +53,8 @@ export default function App() {
             }
           }]
         );
+      } else {
+        console.log('No hay actualizaciones disponibles');
       }
     } catch (error) {
       console.log('Error al verificar actualizaciones:', error);
