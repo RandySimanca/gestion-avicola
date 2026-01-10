@@ -40,6 +40,7 @@ import EditarVentaScreen from '../screens/EditarVentaScreen';
 import EditGalponScreen from '../screens/EditGalponScreen';
 import EditGastoScreen from '../screens/EditGastoScreen';
 import EditCompraScreen from '../screens/EditCompraScreen';
+import AddAbonoScreen from '../screens/AddAbonoScreen';
 
 export type AuthStackParamList = {
     Login: undefined;
@@ -76,6 +77,7 @@ export type RootDrawerParamList = {
     EditGalpon: { galponId: string };
     EditGasto: { gastoId: string };
     EditCompra: { compraId: string };
+    AddAbono: { venta: any };
 };
 
 const Stack = createNativeStackNavigator<AuthStackParamList>();
@@ -342,6 +344,14 @@ function MainDrawer() {
                 component={EditCompraScreen}
                 options={{
                     title: 'Editar Compra',
+                    drawerItemStyle: { display: 'none' },
+                }}
+            />
+            <Drawer.Screen
+                name="AddAbono"
+                component={AddAbonoScreen}
+                options={{
+                    title: 'Registrar Abono',
                     drawerItemStyle: { display: 'none' },
                 }}
             />

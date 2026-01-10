@@ -25,28 +25,26 @@ interface Venta {
   fecha: string;
   forma_pago: string;
   abono?: number;
+  abonos?: Array<{ monto: number; fecha: string }>;
   observaciones?: string;
 }
 
 export default function VentasScreen({ navigation }: any) {
-  const { currentBusiness } = useBusiness();
+  const { tipoNegocio } = useBusiness();
   const [ventas, setVentas] = useState<Venta[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
   useEffect(() => {
     cargarVentas();
-  }, [currentBusiness]);
+  }, [tipoNegocio]);
 
   const cargarVentas = async () => {
     try {
-      const response = await apiService.getVentas(currentBusiness);
+      const response = await apiService.getVentas(tipoNegocio);
       if (response.success && response.data) {
-        // Ordenar por fecha descendente
-        const ventasOrdenadas = response.data.sort((a: any, b: any) => {
-          return new Date(b.fecha).getTime() - new Date(a.fecha).getTime();
-        });
-        setVentas(ventasOrdenadas);
+        // El API ya devuelve las ventas ordenadas de forma robusta
+        setVentas(response.data);
       }
     } catch (error) {
       console.error('Error cargando ventas:', error);
@@ -78,7 +76,7 @@ export default function VentasScreen({ navigation }: any) {
             try {
               setLoading(true);
               const response = await apiService.deleteVenta(venta.id);
-              
+
               if (response.success) {
                 Alert.alert('Éxito', 'Venta eliminada correctamente');
                 await cargarVentas();
@@ -142,14 +140,14 @@ export default function VentasScreen({ navigation }: any) {
 
   const handleInvoice = async (venta: Venta) => {
     try {
-        await generateVentaPDF(venta);
+      await generateVentaPDF(venta);
     } catch (error) {
-        Alert.alert('Error', 'No se pudo generar la factura');
+      Alert.alert('Error', 'No se pudo generar la factura');
     }
   };
 
   const renderVenta = ({ item }: { item: Venta }) => {
-    const saldoPendiente = item.forma_pago === 'CREDITO' 
+    const saldoPendiente = item.forma_pago === 'CREDITO'
       ? item.total - (item.abono || 0)
       : 0;
 
@@ -215,18 +213,44 @@ export default function VentasScreen({ navigation }: any) {
           </View>
 
           {item.forma_pago === 'CREDITO' && (
-            <>
+            <View style={styles.creditoContainer}>
               <View style={styles.ventaRow}>
-                <Text style={styles.ventaLabel}>Abono:</Text>
-                <Text style={styles.ventaValue}>${formatNumber(item.abono || 0)}</Text>
+                <Text style={styles.ventaLabel}>Total Venta:</Text>
+                <Text style={styles.totalText}>${formatNumber(item.total)}</Text>
               </View>
-              <View style={styles.ventaRow}>
+
+              <View style={styles.abonosHeader}>
+                <Text style={styles.abonosTitle}>Historial de Abonos:</Text>
+                <TouchableOpacity
+                  style={styles.addAbonoButton}
+                  onPress={() => navigation.navigate('AddAbono', { venta: item })}
+                >
+                  <Ionicons name="add-circle" size={20} color="#27ae60" />
+                  <Text style={styles.addAbonoText}>Abonar</Text>
+                </TouchableOpacity>
+              </View>
+
+              {(!item.abonos || item.abonos.length === 0) && (item.abono || 0) > 0 ? (
+                <View style={styles.abonoItem}>
+                  <Text style={styles.abonoFecha}>{formatDate(item.fecha)}</Text>
+                  <Text style={styles.abonoMonto}>${formatNumber(item.abono || 0)}</Text>
+                </View>
+              ) : (
+                item.abonos?.map((abono, index) => (
+                  <View key={index} style={styles.abonoItem}>
+                    <Text style={styles.abonoFecha}>{formatDate(abono.fecha)}</Text>
+                    <Text style={styles.abonoMonto}>${formatNumber(abono.monto)}</Text>
+                  </View>
+                ))
+              )}
+
+              <View style={[styles.ventaRow, { marginTop: 10, borderTopWidth: 1, borderTopColor: '#f0f0f0', paddingTop: 10 }]}>
                 <Text style={styles.ventaLabel}>Saldo pendiente:</Text>
                 <Text style={[styles.ventaValue, styles.saldoText]}>
                   ${formatNumber(saldoPendiente)}
                 </Text>
               </View>
-            </>
+            </View>
           )}
 
           {item.observaciones && (
@@ -400,8 +424,9 @@ const styles = StyleSheet.create({
     color: '#27ae60',
   },
   saldoText: {
-    color: '#e67e22',
+    color: '#e74c3c',
     fontWeight: 'bold',
+    fontSize: 16,
   },
   formaPagoBadge: {
     paddingHorizontal: 12,
@@ -445,5 +470,55 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#95a5a6',
     textAlign: 'center',
+  },
+  creditoContainer: {
+    backgroundColor: '#fff9f4',
+    padding: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#ffe0cc',
+    marginTop: 8,
+  },
+  abonosHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 12,
+    marginBottom: 8,
+  },
+  abonosTitle: {
+    fontSize: 13,
+    fontWeight: 'bold',
+    color: '#7f8c8d',
+  },
+  addAbonoButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#e8f5e9',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+  },
+  addAbonoText: {
+    fontSize: 12,
+    color: '#27ae60',
+    fontWeight: 'bold',
+    marginLeft: 4,
+  },
+  abonoItem: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingVertical: 4,
+    borderBottomWidth: 1,
+    borderBottomColor: '#fff',
+  },
+  abonoFecha: {
+    fontSize: 12,
+    color: '#95a5a6',
+  },
+  abonoMonto: {
+    fontSize: 13,
+    color: '#2c3e50',
+    fontWeight: '500',
   },
 });

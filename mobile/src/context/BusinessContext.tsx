@@ -33,6 +33,9 @@ export const BusinessProvider: React.FC<BusinessProviderProps> = ({ children }) 
       const saved = await AsyncStorage.getItem('selected_business');
       if (saved) {
         setTipoNegocioState(saved as TipoNegocio);
+        apiService.setTipoNegocio(saved as TipoNegocio);
+      } else {
+        apiService.setTipoNegocio(TipoNegocio.PONEDORAS);
       }
     } catch (error) {
       console.error('Error loading business:', error);
@@ -45,6 +48,7 @@ export const BusinessProvider: React.FC<BusinessProviderProps> = ({ children }) 
     try {
       await AsyncStorage.setItem('selected_business', tipo);
       setTipoNegocioState(tipo);
+      apiService.setTipoNegocio(tipo);
     } catch (error) {
       console.error('Error saving business:', error);
     }

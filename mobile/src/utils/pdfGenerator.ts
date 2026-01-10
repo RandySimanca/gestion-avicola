@@ -65,11 +65,28 @@ export const generateVentaPDF = async (venta: any) => {
 
         <div class="totals">
             <div class="total-row">
-                <span class="label">Total:</span> $${venta.total.toLocaleString()}
+                <span class="label">Total Venta:</span> $${venta.total.toLocaleString()}
             </div>
+            
             ${venta.forma_pago === 'CREDITO' ? `
+            <div style="margin-top: 15px; border-top: 1px solid #eee; padding-top: 10px;">
+                <div class="label" style="margin-bottom: 5px;">Historial de Pagos:</div>
+                <table style="width: 100%; font-size: 12px; margin-bottom: 15px;">
+                    ${(!venta.abonos || venta.abonos.length === 0) && (venta.abono || 0) > 0 ? `
+                        <tr>
+                            <td>${new Date(venta.fecha).toLocaleDateString()}</td>
+                            <td style="text-align: right;">$${(venta.abono || 0).toLocaleString()}</td>
+                        </tr>
+                    ` : (venta.abonos || []).map((a: any) => `
+                        <tr>
+                            <td>${new Date(a.fecha).toLocaleDateString()}</td>
+                            <td style="text-align: right;">$${a.monto.toLocaleString()}</td>
+                        </tr>
+                    `).join('')}
+                </table>
+            </div>
             <div class="total-row">
-                <span class="label">Abono:</span> $${(venta.abono || 0).toLocaleString()}
+                <span class="label">Total Abonado:</span> $${(venta.abono || 0).toLocaleString()}
             </div>
             <div class="grand-total">
                 <span class="label">Saldo Pendiente:</span> $${(venta.total - (venta.abono || 0)).toLocaleString()}

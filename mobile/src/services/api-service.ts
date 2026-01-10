@@ -808,10 +808,14 @@ class ApiService {
 
         // 2. Crear venta
         const ventaRef = doc(collection(db, 'VENTAS'));
+        const fechaVenta = venta.fecha || new Date().toISOString();
+        
         transaction.set(ventaRef, {
           ...venta,
+          fecha: fechaVenta,
           tipo_negocio: venta.tipo_negocio || this.currentTipoNegocio,
           abono: venta.abono || 0,
+          abonos: venta.abono > 0 ? [{ monto: venta.abono, fecha: fechaVenta }] : [],
           fecha_creacion: new Date().toISOString()
         });
 
@@ -836,23 +840,94 @@ class ApiService {
     }
   }
 
+  async addAbono(ventaId: string, monto: number): Promise<ApiResponse<any>> {
+    try {
+      const ventaRef = doc(db, 'VENTAS', ventaId);
+      
+      await runTransaction(db, async (transaction) => {
+        const ventaDoc = await transaction.get(ventaRef);
+        if (!ventaDoc.exists()) {
+          throw new Error('Venta no encontrada');
+        }
+
+        const ventaData = ventaDoc.data();
+        const abonosActuales = ventaData.abonos || [];
+        
+        // Si es una venta vieja con abono pero sin lista de abonos, inicializarla
+        if (abonosActuales.length === 0 && (ventaData.abono || 0) > 0) {
+          abonosActuales.push({
+            monto: ventaData.abono,
+            fecha: ventaData.fecha || ventaData.fecha_creacion || new Date().toISOString()
+          });
+        }
+
+        const nuevoAbono = {
+          monto: monto,
+          fecha: new Date().toISOString()
+        };
+
+        const nuevosAbonos = [...abonosActuales, nuevoAbono];
+        const nuevoTotalAbono = nuevosAbonos.reduce((sum, a) => sum + a.monto, 0);
+
+        if (nuevoTotalAbono > ventaData.total) {
+          throw new Error('El total de abonos no puede superar el total de la venta');
+        }
+
+        transaction.update(ventaRef, {
+          abonos: nuevosAbonos,
+          abono: nuevoTotalAbono // Mantener el campo abono como la suma para compatibilidad
+        });
+      });
+
+      return { success: true };
+    } catch (error: any) {
+      return { success: false, error: error.message };
+    }
+  }
+
   async getVentas(tipoNegocio?: TipoNegocio): Promise<ApiResponse<any[]>> {
     try {
       const tipo = tipoNegocio || this.currentTipoNegocio;
-      let q = query(collection(db, 'VENTAS'), orderBy('fecha', 'desc'));
+      
+      // Para compatibilidad con datos viejos que no tienen tipo_negocio o fecha,
+      // traemos todo y filtramos/ordenamos en memoria.
+      // Firestore excluye documentos si el campo del orderBy no existe.
+      const q = query(collection(db, 'VENTAS'));
+      const snapshot = await getDocs(q);
+      
+      let ventas = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
       
       if (tipo) {
-        q = query(
-          collection(db, 'VENTAS'), 
-          where('tipo_negocio', '==', tipo),
-          orderBy('fecha', 'desc')
-        );
+        ventas = ventas.filter((v: any) => {
+          // Si no tiene tipo_negocio, lo mostramos en todas las vistas para no perder datos
+          // o al menos en PONEDORAS. Para ser seguros, lo mostramos si es PONEDORAS
+          // o si el producto coincide con el tipo de negocio (ej: aves en descarte)
+          if (!v.tipo_negocio) {
+            if (tipo === TipoNegocio.PONEDORAS) return true;
+            if (tipo === TipoNegocio.DESCARTE && v.tipo_producto === 'AVES') return true;
+            return false;
+          }
+          return v.tipo_negocio === tipo;
+        });
       }
+
+      // Ordenar por fecha descendente en memoria de forma robusta
+      ventas.sort((a: any, b: any) => {
+        const getFecha = (item: any) => {
+          if (!item) return 0;
+          const f = item.fecha || item.fecha_creacion;
+          if (!f) return 0;
+          // Manejar si es un Timestamp de Firebase
+          if (typeof f === 'object' && f.seconds) return f.seconds * 1000;
+          const parsed = new Date(f).getTime();
+          return isNaN(parsed) ? 0 : parsed;
+        };
+        return getFecha(b) - getFecha(a);
+      });
       
-      const querySnapshot = await getDocs(q);
-      const ventas = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       return { success: true, data: ventas };
     } catch (error: any) {
+      console.error('Error en getVentas:', error);
       return { success: false, error: error.message };
     }
   }
