@@ -1674,7 +1674,17 @@ async deleteRegistroDiario(id: string): Promise<ApiResponse<any>> {
         .map(d => ({ id: d.id, ...d.data() as any }))
         .filter((v: any) => {
           if (!v.fecha || v.fecha < inicioHoyIso) return false;
-          if (tipo && v.tipo_negocio && v.tipo_negocio !== tipo) return false;
+          if (tipo) {
+            // Si tiene tipo_negocio, filtro estricto
+            if (v.tipo_negocio) return v.tipo_negocio === tipo;
+            
+            // Si NO tiene tipo_negocio, usamos lógica quirúrgica por producto
+            if (v.tipo_producto === 'AVES') {
+              return tipo === TipoNegocio.DESCARTE;
+            } else {
+              return tipo === TipoNegocio.PONEDORAS;
+            }
+          }
           return true;
         })
         .reduce((sum: number, v: any) => {
@@ -1695,12 +1705,16 @@ async deleteRegistroDiario(id: string): Promise<ApiResponse<any>> {
       gastosHoyRaw
         .filter((g: any) => {
           if (!g.fecha || g.fecha < inicioHoyIso) return false;
-          if (tipo && g.tipo_negocio && g.tipo_negocio !== tipo) return false;
+          if (tipo) {
+            if (g.tipo_negocio) return g.tipo_negocio === tipo;
+            // Por defecto los gastos sin etiqueta van a Ponedoras
+            return tipo === TipoNegocio.PONEDORAS;
+          }
           return true;
         })
         .forEach((g: any) => {
           if (g.tipo_gasto === 'COMPRA_LOTE') {
-            if (g.tipo_negocio === 'PONEDORAS') {
+            if (g.tipo_negocio === 'PONEDORAS' || (!g.tipo_negocio && tipo === TipoNegocio.PONEDORAS)) {
               inversionesHoy += (Number(g.total) || 0);
             } else {
               gastosOperativosHoy += (Number(g.total) || 0);
