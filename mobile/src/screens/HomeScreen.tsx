@@ -17,10 +17,10 @@ interface Props {
 }
 
 const NEGOCIOS = [
-    { tipo: TipoNegocio.PONEDORAS, nombre: 'Ponedoras', icon: '🐔', color: '#f1c40f' },
     { tipo: TipoNegocio.DESCARTE, nombre: 'Descarte', icon: '🐓', color: '#e74c3c' },
-    { tipo: TipoNegocio.VACAS, nombre: 'Vacas', icon: '🐄', color: '#3498db' },
-    { tipo: TipoNegocio.CERDOS, nombre: 'Cerdos', icon: '🐷', color: '#e67e22' }
+    { tipo: TipoNegocio.PONEDORAS, nombre: 'Ponedoras', icon: '🐔', color: '#f1c40f' },
+    // { tipo: TipoNegocio.VACAS, nombre: 'Vacas', icon: '🐄', color: '#3498db' },
+    // { tipo: TipoNegocio.CERDOS, nombre: 'Cerdos', icon: '🐷', color: '#e67e22' }
 ];
 
 export default function HomeScreen({ navigation }: Props) {
@@ -28,14 +28,17 @@ export default function HomeScreen({ navigation }: Props) {
     const { tipoNegocio, setTipoNegocio } = useBusiness();
     const [pendingCount, setPendingCount] = useState(0);
     const [syncing, setSyncing] = useState(false);
+    const [loadingStats, setLoadingStats] = useState(false);
     const [stats, setStats] = useState({
         totalAves: 0,
-        mortalidadSemanal: 0,
         produccionHoy: 0,
         lotesActivos: 0,
         ventasHoy: 0,
         gastosOperativosHoy: 0,
-        inversionesHoy: 0
+        inversionesHoy: 0,
+        pagosEfectivoHoy: 0,
+        mortalidadTotalActivos: 0,
+        mortalidadSemanal: 0
     });
 
     useEffect(() => {
@@ -49,18 +52,29 @@ export default function HomeScreen({ navigation }: Props) {
     }, [navigation, tipoNegocio]);
 
     const loadDashboardStats = async (tipo = tipoNegocio) => {
+        setLoadingStats(true);
         try {
             const response = await apiService.getGlobalKPIs(tipo);
             if (response.success && response.data) {
                 setStats({
                     totalAves: response.data.totalAves,
-                    mortalidadSemanal: response.data.mortalidadSemanal,
                     produccionHoy: response.data.produccionHoy,
                     lotesActivos: response.data.lotesActivos,
                     ventasHoy: response.data.ventasHoy || 0,
                     gastosOperativosHoy: response.data.gastosOperativosHoy || 0,
-                    inversionesHoy: response.data.inversionesHoy || 0
+                    inversionesHoy: response.data.inversionesHoy || 0,
+                    pagosEfectivoHoy: response.data.pagosEfectivoHoy || 0,
+                    mortalidadTotalActivos: response.data.mortalidadTotalActivos || 0,
+                    mortalidadSemanal: response.data.mortalidadSemanal || 0
                 });
+                console.log('=== DASHBOARD STATS ===');
+                console.log('Tipo de negocio:', tipo);
+                console.log('Datos completos de la API:', response.data);
+                console.log('Mortalidad Semanal:', response.data.mortalidadSemanal);
+                console.log('Total Aves:', response.data.totalAves);
+                console.log('Lotes Activos:', response.data.lotesActivos);
+                console.log('Mortalidad Activa en State:', response.data.mortalidadTotalActivos);
+                console.log('======================');
             } else {
                 // Fallback a datos cacheados si falla el API (offline)
                 const lotes = await apiService.getCachedLotes();
@@ -73,6 +87,8 @@ export default function HomeScreen({ navigation }: Props) {
             }
         } catch (error) {
             console.error('Error al cargar estadísticas:', error);
+        } finally {
+            setLoadingStats(false);
         }
     };
 
@@ -183,23 +199,47 @@ export default function HomeScreen({ navigation }: Props) {
                 )}
 
                 <View style={styles.section}>
-                    <Text style={styles.sectionTitle}>Resumen del Negocio</Text>
-                    <View style={styles.statsGrid}>
+                    <View style={styles.sectionHeader}>
+                        <Text style={styles.sectionTitle}>Resumen del Negocio</Text>
+                        {loadingStats && <ActivityIndicator size="small" color="#3498db" />}
+                    </View>
+                    <View style={[styles.statsGrid, loadingStats && { opacity: 0.6 }]}>
+                        {tipoNegocio === TipoNegocio.PONEDORAS && (
+                            <>
+                                <StatCard
+                                    title="Utilidad Operativa"
+                                    value={formatCurrency(stats.ventasHoy - stats.gastosOperativosHoy)}
+                                    color="#2ecc71"
+                                    secondaryValue={`Ventas: ${formatCurrency(stats.ventasHoy)}`}
+                                />
+                                <StatCard
+                                    title="Inversión Hoy"
+                                    value={formatCurrency(stats.inversionesHoy)}
+                                    color="#3498db"
+                                    secondaryValue="Ponedoras"
+                                />
+                            </>
+                        )}
+                        {tipoNegocio === TipoNegocio.DESCARTE && (
+                            <StatCard
+                                title="Pagos en Efectivo Hoy"
+                                value={formatCurrency(stats.pagosEfectivoHoy)}
+                                color="#27ae60"
+                                secondaryValue="Efectivo recibido"
+                            />
+                        )}
                         <StatCard
-                            title="Utilidad Operativa"
-                            value={formatCurrency(stats.ventasHoy - stats.gastosOperativosHoy)}
-                            color="#2ecc71"
-                            secondaryValue={`Ventas: ${formatCurrency(stats.ventasHoy)}`}
-                        />
-                        <StatCard
-                            title="Inversión Hoy"
-                            value={formatCurrency(stats.inversionesHoy)}
-                            color="#3498db"
-                            secondaryValue="Ponedoras"
+                            title="Mortalidad Activa"
+                            value={stats.mortalidadTotalActivos}
+                            unit="aves"
+                            color="#e74c3c"
+                            secondaryValue={`Semanal: ${stats.mortalidadSemanal}`}
                         />
                         <StatCard title="Población Total" value={stats.totalAves} unit="aves" color="#9b59b6" />
-                        <StatCard title="Producción Hoy" value={stats.produccionHoy} unit="huevos" color="#f1c40f" />
-                        <StatCard title="Mortalidad (7d)" value={stats.mortalidadSemanal} unit="aves" color="#e74c3c" />
+                        {tipoNegocio === TipoNegocio.PONEDORAS && (
+                            <StatCard title="Producción Hoy" value={stats.produccionHoy} unit="huevos" color="#f1c40f" />
+                        )}
+
                         <StatCard title="Lotes Activos" value={stats.lotesActivos} color="#95a5a6" />
                     </View>
                 </View>
@@ -209,7 +249,9 @@ export default function HomeScreen({ navigation }: Props) {
                     <View style={styles.actionsGrid}>
                         <ActionButton title="Mortalidad" color="#e74c3c" onPress={() => navigation.navigate('Mortalidad')} />
                         <ActionButton title="Alimento" color="#3498db" onPress={() => navigation.navigate('Alimento')} />
-                        <ActionButton title="Postura" color="#f1c40f" onPress={() => navigation.navigate('Postura')} />
+                        {tipoNegocio === TipoNegocio.PONEDORAS && (
+                            <ActionButton title="Postura" color="#f1c40f" onPress={() => navigation.navigate('Postura')} />
+                        )}
                         <ActionButton title="Consumo" color="#e67e22" onPress={() => navigation.navigate('ConsumoInsumos')} />
                     </View>
                 </View>
@@ -282,6 +324,11 @@ const styles = StyleSheet.create({
         fontSize: 18,
         fontWeight: 'bold',
         color: '#2c3e50',
+    },
+    sectionHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
         marginBottom: 15,
     },
     statsGrid: {

@@ -127,6 +127,7 @@ export default function EditLoteScreen({ route, navigation }: Props) {
                     >
                         <Picker.Item label="Ponedora" value="PONEDORA" />
                         <Picker.Item label="Engorde" value="ENGORDE" />
+                        <Picker.Item label="Descarte" value="DESCARTE" />
                     </Picker>
                 </View>
 

@@ -84,7 +84,7 @@ export const generateVentaPDF = async (venta: any) => {
         <div class="info-section" style="margin-top: 30px;">
             <div class="label">Forma de Pago:</div>
             <div>${venta.forma_pago.replace('_', ' ')}</div>
-            ${venta.observaciones ? `<div class="label" style="margin-top: 10px;">Observaciones:</div><div>${venta.observaciones}</div>` : ''}
+            <!--${venta.observaciones ? `<div class="label" style="margin-top: 10px;">Observaciones:</div><div>${venta.observaciones}</div>` : ''}-->
         </div>
 
         <div class="footer">

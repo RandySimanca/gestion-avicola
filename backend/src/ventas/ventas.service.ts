@@ -35,12 +35,22 @@ export class VentasService {
   }
 
   async findAll() {
+    // Solución: Obtener todos los documentos y ordenar en memoria
     const snapshot = await this.firebaseService.getFirestore()
       .collection('VENTAS')
-      .orderBy('fecha', 'desc')
       .get();
     
-    return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    const ventas = snapshot.docs.map(doc => ({ 
+      id: doc.id, 
+      ...doc.data() 
+    })) as any[];
+    
+    // Ordenar en memoria por fecha descendente
+    return ventas.sort((a, b) => {
+      const fechaA = new Date(a.fecha).getTime();
+      const fechaB = new Date(b.fecha).getTime();
+      return fechaB - fechaA; // Descendente
+    });
   }
 
   async findByLote(loteId: string) {
@@ -49,7 +59,17 @@ export class VentasService {
       .where('lote_id', '==', loteId)
       .get();
     
-    return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    const ventas = snapshot.docs.map(doc => ({ 
+      id: doc.id, 
+      ...doc.data() 
+    })) as any[];
+    
+    // Ordenar en memoria por fecha descendente
+    return ventas.sort((a, b) => {
+      const fechaA = new Date(a.fecha).getTime();
+      const fechaB = new Date(b.fecha).getTime();
+      return fechaB - fechaA;
+    });
   }
 
   private async actualizarPoblacionLote(loteId: string, cantidadVendida: number) {

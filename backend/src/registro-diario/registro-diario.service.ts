@@ -22,9 +22,9 @@ export class RegistroDiarioService {
       await firestore.collection('REGISTRO_ENGORDE').add({
         registro_diario_id: docRef.id,
         peso_promedio_g: createRegistroDiarioDto.peso_promedio_g,
-        ica_acumulado: 0, // Se calculará posteriormente
-        conversion_alimenticia_actual: 0, // Se calculará posteriormente
-        ganancia_peso_diaria_g: 0, // Se calculará posteriormente
+        ica_acumulado: 0,
+        conversion_alimenticia_actual: 0,
+        ganancia_peso_diaria_g: 0,
       });
     }
 
@@ -39,8 +39,8 @@ export class RegistroDiarioService {
           pequeños: 0,
           rotos: 0,
         },
-        porcentaje_postura: 0, // Se calculará posteriormente
-        peso_promedio_huevo_g: 0, // Se calculará posteriormente
+        porcentaje_postura: 0,
+        peso_promedio_huevo_g: 0,
       });
     }
 
@@ -55,10 +55,15 @@ export class RegistroDiarioService {
   async findAll() {
     const snapshot = await this.firebaseService.getFirestore()
       .collection('REGISTRO_DIARIO_PRODUCCION')
-      .orderBy('fecha', 'desc')
       .get();
     
-    return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    const registros = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as any[];
+    
+    return registros.sort((a, b) => {
+      const fechaA = new Date(a.fecha).getTime();
+      const fechaB = new Date(b.fecha).getTime();
+      return fechaB - fechaA;
+    });
   }
 
   async findByLote(loteId: string) {
@@ -75,7 +80,6 @@ export class RegistroDiarioService {
       return { id: doc.id, ...d };
     });
     
-    // Sort in memory to avoid index requirement for now
     return data.sort((a: any, b: any) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime());
   }
 
@@ -128,7 +132,6 @@ export class RegistroDiarioService {
     }
   }
 
-  // Métodos para obtener registros específicos
   async getRegistrosEngorde(loteId: string) {
     const snapshot = await this.firebaseService.getFirestore()
       .collection('REGISTRO_ENGORDE')
@@ -145,7 +148,6 @@ export class RegistroDiarioService {
     return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
   }
 
-  // Métodos para cálculos de KPIs
   async calcularKPIsLote(loteId: string) {
     const registros = await this.findByLote(loteId);
     const loteDoc = await this.firebaseService.getFirestore()
@@ -159,17 +161,14 @@ export class RegistroDiarioService {
 
     const loteData = loteDoc.data() as any;
     
-    // Calcular mortalidad acumulada
     const mortalidadTotal = registros.reduce((sum, reg) => sum + (reg as any).mortalidad_dia, 0);
     const tasaMortalidad = (mortalidadTotal / loteData.poblacion_inicial) * 100;
 
-    // Calcular ICA acumulado (Índice de Conversión Alimenticia)
     const alimentoTotal = registros.reduce((sum, reg) => sum + (reg as any).alimento_consumido_kg, 0);
     const pesoPromedioActual = registros.reduce((sum, reg) => sum + ((reg as any).peso_promedio_g || 0), 0) / registros.length;
-    const pesoTotal = (pesoPromedioActual * loteData.poblacion_actual) / 1000; // Convertir a kg
+    const pesoTotal = (pesoPromedioActual * loteData.poblacion_actual) / 1000;
     const icaAcumulado = pesoTotal > 0 ? alimentoTotal / pesoTotal : 0;
 
-    // Calcular postura semanal si es lote de ponedoras
     const esPonedora = loteData.tipo_ave === 'PONEDORA';
     let posturaSemanal = 0;
     
@@ -184,10 +183,7 @@ export class RegistroDiarioService {
       
       const huevosSemanales = registrosSemanales.reduce((sum, reg) => sum + ((reg as any).huevos_totales || 0), 0);
       const poblacionPromedio = registrosSemanales.length > 0 
-        ? registrosSemanales.reduce((sum, reg) => {
-            // Aquí necesitaríamos la población histórica, simplificamos con población actual
-            return sum + loteData.poblacion_actual;
-          }, 0) / registrosSemanales.length
+        ? registrosSemanales.reduce((sum) => sum + loteData.poblacion_actual, 0) / registrosSemanales.length
         : loteData.poblacion_actual;
       
       posturaSemanal = poblacionPromedio > 0 ? (huevosSemanales / poblacionPromedio) * 100 : 0;
@@ -213,14 +209,14 @@ export class RegistroDiarioService {
     const lotes = todosLosLotes.filter(lote => lote.activo === true);
     const lotesActivos = lotes.length;
 
-    // 2. Obtener todos los registros diarios y ventas para calcular población real
+    // 2. Obtener todos los registros diarios para cálculos
     const registrosSnapshot = await firestore.collection('REGISTRO_DIARIO_PRODUCCION').get();
     const todosLosRegistros = registrosSnapshot.docs.map(doc => doc.data() as any);
 
     const ventasSnapshot = await firestore.collection('VENTAS').get();
     const todasLasVentas = ventasSnapshot.docs.map(doc => doc.data() as any);
 
-    // 3. Calcular Población Total Real solo de lotes activos (Inicial - Mortalidad - Ventas)
+    // 3. Calcular Población Total Real solo de lotes activos
     let totalAves = 0;
     lotes.forEach(lote => {
       const mortalidadLote = todosLosRegistros
@@ -235,24 +231,46 @@ export class RegistroDiarioService {
       totalAves += poblacionReal;
     });
 
-    // 4. Producción de Hoy y Mortalidad Semanal
+    // 4. Producción de Hoy - Solo huevos de lotes de PONEDORA activos
     const hoy = new Date();
     const hoyIso = hoy.toISOString().split('T')[0];
     
+    const lotesPonetrasActivos = lotes.filter(l => l.tipo_ave === 'PONEDORA');
+    const lotesPonetrasIds = new Set(lotesPonetrasActivos.map(l => l.id));
+    
+    const produccionHoy = todosLosRegistros
+      .filter(reg => {
+        const fechaReg = reg.fecha ? reg.fecha.split('T')[0] : '';
+        return fechaReg === hoyIso && lotesPonetrasIds.has(reg.lote_id);
+      })
+      .reduce((sum, reg) => sum + (reg.huevos_totales || 0), 0);
+
+    // 5. Mortalidad Semanal - Solo de lotes activos
     const sieteDiasAtras = new Date();
     sieteDiasAtras.setDate(sieteDiasAtras.getDate() - 7);
     sieteDiasAtras.setHours(0, 0, 0, 0);
 
-    const produccionHoy = todosLosRegistros
-      .filter(reg => reg.fecha && reg.fecha.startsWith(hoyIso))
-      .reduce((sum, reg) => sum + (reg.huevos_totales || 0), 0);
-
+    const lotesActivosIds = new Set(lotes.map(l => l.id));
+    
     const mortalidadSemanal = todosLosRegistros
       .filter(reg => {
+        if (!lotesActivosIds.has(reg.lote_id)) return false;
         const fechaReg = new Date(reg.fecha);
         return fechaReg >= sieteDiasAtras;
       })
       .reduce((sum, reg) => sum + (reg.mortalidad_dia || 0), 0);
+
+    console.log('Dashboard KPIs:', {
+      totalAves,
+      produccionHoy,
+      mortalidadSemanal,
+      lotesActivos,
+      hoyIso,
+      registrosFiltrados: todosLosRegistros.filter(reg => {
+        const fechaReg = new Date(reg.fecha);
+        return fechaReg >= sieteDiasAtras && lotesActivosIds.has(reg.lote_id);
+      }).length
+    });
 
     return {
       totalAves,

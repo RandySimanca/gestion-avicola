@@ -627,13 +627,13 @@ class ApiService {
       } else {
         // Guardar localmente para sincronizar después
         await this.savePendingRecord('compras', compra);
-        return { success: true, data: compra, offline: true };
+        return { success: true, data: compra, isNetworkError: true };
       }
     } catch (error: any) {
       if (error.message.includes('Failed to fetch') || error.message.includes('Network')) {
         // Guardar localmente si hay error de red
         await this.savePendingRecord('compras', compra);
-        return { success: true, data: compra, offline: true, isNetworkError: true };
+        return { success: true, data: compra, isNetworkError: true };
       }
       return { success: false, error: error.message };
     }
@@ -1344,10 +1344,16 @@ async deleteRegistroDiario(id: string): Promise<ApiResponse<any>> {
     }
   }
 
-  async getResumenGlobal(): Promise<ApiResponse<any>> {
+  async getResumenGlobal(tipoNegocio?: TipoNegocio): Promise<ApiResponse<any>> {
     try {
+      const tipo = tipoNegocio || this.currentTipoNegocio;
+
       // 1. Obtener todas las ventas (Ingresos)
-      const ventasSnap = await getDocs(collection(db, 'VENTAS'));
+      let qVentas = query(collection(db, 'VENTAS'));
+      if (tipo) {
+        qVentas = query(collection(db, 'VENTAS'), where('tipo_negocio', '==', tipo));
+      }
+      const ventasSnap = await getDocs(qVentas);
       
       let totalIngresosContado = 0;
       let cuentasPorCobrar = 0;
@@ -1366,7 +1372,11 @@ async deleteRegistroDiario(id: string): Promise<ApiResponse<any>> {
       });
 
       // 2. Obtener todos los gastos (Egresos) y clasificarlos
-      const gastosSnap = await getDocs(collection(db, 'GASTOS'));
+      let qGastos = query(collection(db, 'GASTOS'));
+      if (tipo) {
+        qGastos = query(collection(db, 'GASTOS'), where('tipo_negocio', '==', tipo));
+      }
+      const gastosSnap = await getDocs(qGastos);
       
       let gastosOperativos = 0;      // Nómina, servicios, aseo, arriendo
       let inversionLotes = 0;        // Compras de lotes
@@ -1396,6 +1406,7 @@ async deleteRegistroDiario(id: string): Promise<ApiResponse<any>> {
       const totalEgresosCaja = gastosOperativos + inversionLotes + inversionInsumos;
 
       // 3. Obtener inventario actual (Activos)
+      // Nota: INSUMO no tiene tipo_negocio por ahora, se trae todo o se debería filtrar si se implementa
       const insumosSnap = await getDocs(collection(db, 'INSUMO'));
       const valorInventario = insumosSnap.docs.reduce((sum, doc) => {
         const data = doc.data();
@@ -1403,11 +1414,19 @@ async deleteRegistroDiario(id: string): Promise<ApiResponse<any>> {
       }, 0);
 
       // 4. Obtener datos operativos y registros diarios para mortalidad
-      const lotesSnap = await getDocs(collection(db, 'LOTE'));
+      let qLotes = query(collection(db, 'LOTE'));
+      if (tipo) {
+        qLotes = query(collection(db, 'LOTE'), where('tipo_negocio', '==', tipo));
+      }
+      const lotesSnap = await getDocs(qLotes);
       const totalLotes = lotesSnap.size;
       const totalAves = lotesSnap.docs.reduce((sum, doc) => sum + (doc.data().poblacion_inicial || 0), 0);
 
-      const registrosSnap = await getDocs(collection(db, 'REGISTRO_DIARIO_PRODUCCION'));
+      let qRegistros = query(collection(db, 'REGISTRO_DIARIO_PRODUCCION'));
+      if (tipo) {
+        qRegistros = query(collection(db, 'REGISTRO_DIARIO_PRODUCCION'), where('tipo_negocio', '==', tipo));
+      }
+      const registrosSnap = await getDocs(qRegistros);
       
       // 5. Agrupar datos por lote para el reporte detallado
       const detallesLotes: any = {};
@@ -1515,83 +1534,121 @@ async deleteRegistroDiario(id: string): Promise<ApiResponse<any>> {
     try {
       const tipo = tipoNegocio || this.currentTipoNegocio;
 
-      // Obtener lotes activos filtrados
+      // 1. OBTENER LOTES ACTIVOS FILTRADOS POR TIPO DE NEGOCIO
       let qLotes = query(collection(db, 'LOTE'), where('activo', '==', true));
       if (tipo) {
-        qLotes = query(collection(db, 'LOTE'), where('activo', '==', true), where('tipo_negocio', '==', tipo));
+        qLotes = query(
+          collection(db, 'LOTE'), 
+          where('activo', '==', true), 
+          where('tipo_negocio', '==', tipo)
+        );
       }
       const lotesSnapshot = await getDocs(qLotes);
       const lotes = lotesSnapshot.docs.map(d => ({ id: d.id, ...d.data() }));
 
-      // Obtener registros filtrados
-      let qRegistros = collection(db, 'REGISTRO_DIARIO_PRODUCCION');
-      if (tipo) {
-        // @ts-ignore
-        qRegistros = query(collection(db, 'REGISTRO_DIARIO_PRODUCCION'), where('tipo_negocio', '==', tipo));
-      }
-      const registrosSnapshot = await getDocs(qRegistros);
-      const registros = registrosSnapshot.docs.map(d => d.data());
+      // Crear un Set con los IDs de lotes activos del tipo de negocio seleccionado
+      const lotesActivosIds = new Set(lotes.map(l => l.id));
 
-      // ... (fechas)
+      // 2. OBTENER REGISTROS DIARIOS (Limitado a los últimos 90 días para rendimiento)
+      const noventaDiasAtras = new Date();
+      noventaDiasAtras.setDate(noventaDiasAtras.getDate() - 90);
+      const noventaDiasAtrasIso = noventaDiasAtras.toISOString();
+
+      const qRegistros = query(
+        collection(db, 'REGISTRO_DIARIO_PRODUCCION'),
+        where('fecha', '>=', noventaDiasAtrasIso)
+      );
+      const registrosSnapshot = await getDocs(qRegistros);
+      const todosLosRegistros = registrosSnapshot.docs.map(d => ({ 
+        id: d.id, 
+        ...d.data() 
+      }));
+
+      // Filtrar registros por tipo de negocio (independiente de si el lote está activo ahora)
+      const registrosDelNegocio = todosLosRegistros.filter((r: any) => {
+        return !tipo || !r.tipo_negocio || r.tipo_negocio === tipo;
+      });
+
+      // 3. CALCULAR FECHAS
       const ahora = new Date();
       const inicioHoyLocal = new Date(ahora.getFullYear(), ahora.getMonth(), ahora.getDate());
       const inicioHoyIso = inicioHoyLocal.toISOString();
 
-      // Obtener ventas de hoy filtradas
-      let qVentas = query(collection(db, 'VENTAS'), where('fecha', '>=', inicioHoyIso));
-      if (tipo) {
-        qVentas = query(collection(db, 'VENTAS'), where('fecha', '>=', inicioHoyIso), where('tipo_negocio', '==', tipo));
-      }
-      const ventasSnapshot = await getDocs(qVentas);
-      const ventasHoy = ventasSnapshot.docs
-        .map(d => d.data())
-        .filter((v: any) => v.fecha && v.fecha >= inicioHoyIso)
-        .reduce((sum: number, v: any) => {
-          // Si es crédito, solo sumamos el abono inicial que entró hoy
-          // Si es contado, sumamos el total
-          if (v.forma_pago === 'CREDITO') {
-            return sum + (Number(v.abono) || 0);
-          } else {
-            return sum + (Number(v.total) || 0);
-          }
-        }, 0);
-
-      // Calcular KPIs
-      const totalAves = lotes.reduce((sum: number, l: any) => sum + (l.poblacion_actual || 0), 0);
-      
-      // Producción hoy
-      const produccionHoy = registros
-        .filter((r: any) => r.fecha && r.fecha >= inicioHoyIso)
-        .reduce((sum: number, r: any) => sum + (r.huevos_totales || 0), 0);
-
-      // Calcular mortalidad de los últimos 7 días
       const sieteDiasAtras = new Date();
       sieteDiasAtras.setDate(sieteDiasAtras.getDate() - 7);
       const sieteDiasAtrasIso = sieteDiasAtras.toISOString().split('T')[0];
 
-      const mortalidadSemanal = registros
-        .filter((r: any) => r.fecha && r.fecha >= sieteDiasAtrasIso)
-        .reduce((sum: number, r: any) => sum + (r.mortalidad_dia || 0), 0);
+      // 4. CALCULAR MORTALIDAD SEMANAL (ÚLTIMOS 7 DÍAS - Todos los lotes del negocio)
+      const mortalidadSemanal = registrosDelNegocio
+        .filter((r: any) => {
+          if (!r.fecha || r.fecha < sieteDiasAtrasIso) return false;
+          return (r.mortalidad_dia || 0) > 0;
+        })
+        .reduce((sum: number, r: any) => sum + (Number(r.mortalidad_dia) || 0), 0);
 
-      // Obtener gastos de hoy para el resumen financiero
-      const gastosSnapshot = await getDocs(query(collection(db, 'GASTOS'), where('fecha', '>=', inicioHoyIso)));
-      const gastosHoyRaw = gastosSnapshot.docs.map(d => d.data());
+      // 5. CALCULAR PRODUCCIÓN HOY (Todos los lotes del negocio)
+      const produccionHoy = registrosDelNegocio
+        .filter((r: any) => r.fecha && r.fecha >= inicioHoyIso)
+        .reduce((sum: number, r: any) => sum + (Number(r.huevos_totales) || 0), 0);
+
+      // 6. VENTAS HOY (Robustez: Obtener todas las del día y filtrar en memoria)
+      const qVentas = query(collection(db, 'VENTAS'), where('fecha', '>=', inicioHoyIso));
+      const ventasSnapshot = await getDocs(qVentas);
+      
+      const ventasHoy = ventasSnapshot.docs
+        .map(d => ({ id: d.id, ...d.data() as any }))
+        .filter((v: any) => {
+          if (!v.fecha || v.fecha < inicioHoyIso) return false;
+          if (tipo && v.tipo_negocio && v.tipo_negocio !== tipo) return false;
+          return true;
+        })
+        .reduce((sum: number, v: any) => {
+          if (v.forma_pago === 'CREDITO') {
+            return sum + (Number(v.abono) || 0);
+          }
+          return sum + (Number(v.total) || 0);
+        }, 0);
+
+      // 7. GASTOS HOY (Robustez: Obtener todos los del día y filtrar en memoria)
+      const qGastos = query(collection(db, 'GASTOS'), where('fecha', '>=', inicioHoyIso));
+      const gastosSnapshot = await getDocs(qGastos);
+      const gastosHoyRaw = gastosSnapshot.docs.map(d => ({ id: d.id, ...d.data() as any }));
       
       let gastosOperativosHoy = 0;
       let inversionesHoy = 0;
       
-      gastosHoyRaw.forEach((g: any) => {
-        if (g.tipo_gasto === 'COMPRA_LOTE') {
-          const lote = lotes.find(l => l.id === g.lote_id);
-          if (lote && lote.tipo_ave === 'PONEDORA') {
-            inversionesHoy += (Number(g.total) || 0);
+      gastosHoyRaw
+        .filter((g: any) => {
+          if (!g.fecha || g.fecha < inicioHoyIso) return false;
+          if (tipo && g.tipo_negocio && g.tipo_negocio !== tipo) return false;
+          return true;
+        })
+        .forEach((g: any) => {
+          if (g.tipo_gasto === 'COMPRA_LOTE') {
+            if (g.tipo_negocio === 'PONEDORAS') {
+              inversionesHoy += (Number(g.total) || 0);
+            } else {
+              gastosOperativosHoy += (Number(g.total) || 0);
+            }
           } else {
             gastosOperativosHoy += (Number(g.total) || 0);
           }
-        } else {
-          gastosOperativosHoy += (Number(g.total) || 0);
-        }
-      });
+        });
+
+      // 8. POBLACIÓN TOTAL (Solo lotes activos)
+      const totalAves = lotes.reduce(
+        (sum: number, l: any) => sum + (Number(l.poblacion_actual) || 0), 
+        0
+      );
+
+      // 9. MORTALIDAD TOTAL ACTIVOS (Solo registros de lotes que están activos AHORA)
+      const mortalidadTotalActivos = registrosDelNegocio
+        .filter((r: any) => lotesActivosIds.has(r.lote_id))
+        .reduce((sum: number, r: any) => {
+          return sum + (Number(r.mortalidad_dia) || 0);
+        }, 0);
+
+      const pagosEfectivoHoy = ventasHoy; // En esta implementación, ventasHoy ya es el efectivo recibido
 
       return {
         success: true,
@@ -1602,7 +1659,9 @@ async deleteRegistroDiario(id: string): Promise<ApiResponse<any>> {
           mortalidadSemanal,
           ventasHoy,
           gastosOperativosHoy,
-          inversionesHoy
+          inversionesHoy,
+          mortalidadTotalActivos,
+          pagosEfectivoHoy
         }
       };
     } catch (error: any) {
@@ -1665,14 +1724,23 @@ async deleteRegistroDiario(id: string): Promise<ApiResponse<any>> {
 
   // Métodos auxiliares para mantener compatibilidad
   // Métodos auxiliares para mantener compatibilidad
-  async getPendingRecords(type: string) { 
-    try {
-      const jsonValue = await AsyncStorage.getItem(`pending_${type}`);
-      return jsonValue != null ? JSON.parse(jsonValue) : [];
-    } catch(e) {
-      return [];
+async getPendingRecords(type?: string): Promise<any[]> { 
+  try {
+    if (!type) {
+        const types = ['produccion', 'ventas', 'gastos', 'mortalidad', 'compras'];
+        let allPending: any[] = [];
+        for (const t of types) {
+            const p = await this.getPendingRecords(t);
+            allPending = [...allPending, ...p];
+        }
+        return allPending;
     }
+    const jsonValue = await AsyncStorage.getItem(`pending_${type}`);
+    return jsonValue != null ? JSON.parse(jsonValue) : [];
+  } catch(e) {
+    return [];
   }
+}
 
   async savePendingRecord(type: string, data: any) {
     try {
@@ -1684,7 +1752,7 @@ async deleteRegistroDiario(id: string): Promise<ApiResponse<any>> {
     }
   }
 
-  async syncPendingData() { return { success: true }; }
+  async syncPendingData(): Promise<{success: boolean; error?: string}> { return { success: true }; }
   
   getConnectionStatus() {
     return this.isOnline;
