@@ -16,9 +16,11 @@ import apiService from '../services/api-service';
 import LoteSelector from '../components/LoteSelector';
 import { useAuth } from '../context/AuthContext';
 import { useNavigation } from '@react-navigation/native';
+import { useBusiness } from '../context/BusinessContext';
 
 export default function GastosScreen() {
     const { user } = useAuth();
+    const { tipoNegocio } = useBusiness();
     const navigation = useNavigation<any>();
 
     // Robust admin check consistent with other screens
@@ -43,10 +45,10 @@ export default function GastosScreen() {
     useEffect(() => {
         loadGastos();
         loadLotes();
-    }, [loteId]);
+    }, [loteId, tipoNegocio]);
 
     const loadLotes = async () => {
-        const response = await apiService.getLotes();
+        const response = await apiService.getLotes(tipoNegocio);
         if (response.success && response.data) {
             const map: Record<string, string> = {};
             response.data.forEach((l: any) => map[l.id] = l.nombre);
@@ -57,7 +59,7 @@ export default function GastosScreen() {
     const loadGastos = async () => {
         setLoadingList(true);
         try {
-            const response = await apiService.getGastos(loteId || undefined);
+            const response = await apiService.getGastos(loteId || undefined, tipoNegocio);
             if (response.success) {
                 setGastos(response.data || []);
             }
@@ -79,12 +81,13 @@ export default function GastosScreen() {
             fecha: new Date().toISOString(),
             concepto,
             tipo_gasto: tipoGasto,
+            tipo_negocio: tipoNegocio,
             cantidad: parseFloat(cantidad),
             precio_unitario: parseFloat(precioUnitario),
             total,
             metodo_pago: metodoPago,
         };
-        
+
         // Solo incluir campos opcionales si tienen valor
         if (loteId) data.lote_id = loteId;
         if (proveedor) data.proveedor = proveedor;
@@ -208,7 +211,11 @@ export default function GastosScreen() {
                     </View>
 
                     <Text style={styles.label}>Lote (Opcional)</Text>
-                    <LoteSelector onSelect={(lote) => setLoteId(lote.id)} selectedLoteId={loteId} />
+                    <LoteSelector
+                        onSelect={(lote) => setLoteId(lote.id)}
+                        selectedLoteId={loteId}
+                        tipoNegocio={tipoNegocio}
+                    />
 
                     <Text style={styles.label}>Concepto *</Text>
                     <TextInput

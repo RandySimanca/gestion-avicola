@@ -304,15 +304,24 @@ class ApiService {
   }
 
   // Métodos para Insumos
-  async getInsumos(): Promise<ApiResponse<any[]>> {
-    try {
-      const querySnapshot = await getDocs(collection(db, 'INSUMO'));
-      const insumos = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      return { success: true, data: insumos };
-    } catch (error: any) {
-      return { success: false, error: error.message };
+async getInsumos(tipoNegocio?: TipoNegocio): Promise<ApiResponse<any[]>> {
+  try {
+    const tipo = tipoNegocio || this.currentTipoNegocio;
+    const querySnapshot = await getDocs(collection(db, 'INSUMO'));
+    let insumos = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+
+    if (tipo) {
+      insumos = insumos.filter((i: any) => {
+        if (!i.tipo_negocio) return tipo === TipoNegocio.PONEDORAS;
+        return i.tipo_negocio === tipo;
+      });
     }
+
+    return { success: true, data: insumos };
+  } catch (error: any) {
+    return { success: false, error: error.message };
   }
+}
 
   async createInsumo(insumo: any): Promise<ApiResponse<any>> {
     try {
@@ -456,39 +465,45 @@ class ApiService {
   }
 
   async getGastos(loteId?: string, tipoNegocio?: TipoNegocio): Promise<ApiResponse<any[]>> {
-    try {
-      const tipo = tipoNegocio || this.currentTipoNegocio;
-      let constraints = [];
-      
-      if (loteId) {
-        constraints.push(where('lote_id', '==', loteId));
-      }
-      
-      if (tipo) {
-        constraints.push(where('tipo_negocio', '==', tipo));
-      }
-      
-      const q = constraints.length > 0 
-        ? query(collection(db, 'GASTOS'), ...constraints)
-        : query(collection(db, 'GASTOS'));
-        
-      const querySnapshot = await getDocs(q);
-      const gastos = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      
-      // Filtrar solo gastos operativos (excluir compras y consumos)
-      const gastosOperativos = gastos.filter((gasto: any) => {
-        const tipoGasto = gasto.tipo_gasto;
-        return tipoGasto && 
-               tipoGasto !== 'COMPRA_LOTE' && 
-               tipoGasto !== 'COMPRA_INSUMO' && 
-               tipoGasto !== 'CONSUMO_LOTE';
-      });
-      
-      return { success: true, data: gastosOperativos };
-    } catch (error: any) {
-      return { success: false, error: error.message };
+  try {
+    const tipo = tipoNegocio || this.currentTipoNegocio;
+    
+    // Traer todos los gastos del lote o todos los gastos para filtrar quirúrgicamente
+    let q;
+    if (loteId) {
+      q = query(collection(db, 'GASTOS'), where('lote_id', '==', loteId));
+    } else {
+      q = query(collection(db, 'GASTOS'));
     }
+      
+    const querySnapshot = await getDocs(q);
+    let gastos = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    
+    // Filtrado por tipo de negocio
+    if (tipo) {
+      gastos = gastos.filter((g: any) => {
+        if (!g.tipo_negocio) return tipo === TipoNegocio.PONEDORAS;
+        return g.tipo_negocio === tipo;
+      });
+    }
+
+    // Filtrar solo gastos operativos (excluir compras y consumos)
+    const gastosOperativos = gastos.filter((gasto: any) => {
+      const tipoGasto = gasto.tipo_gasto;
+      return tipoGasto && 
+             tipoGasto !== 'COMPRA_LOTE' && 
+             tipoGasto !== 'COMPRA_INSUMO' && 
+             tipoGasto !== 'CONSUMO_LOTE';
+    });
+    
+    // Ordenar por fecha desc
+    gastosOperativos.sort((a: any, b: any) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime());
+
+    return { success: true, data: gastosOperativos };
+  } catch (error: any) {
+    return { success: false, error: error.message };
   }
+}
 
   // Métodos para Compras
   async createCompra(compra: any): Promise<ApiResponse<any>> {
@@ -898,18 +913,18 @@ class ApiService {
       let ventas = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
       
       if (tipo) {
-        ventas = ventas.filter((v: any) => {
-          // Si no tiene tipo_negocio, lo mostramos en todas las vistas para no perder datos
-          // o al menos en PONEDORAS. Para ser seguros, lo mostramos si es PONEDORAS
-          // o si el producto coincide con el tipo de negocio (ej: aves en descarte)
-          if (!v.tipo_negocio) {
-            if (tipo === TipoNegocio.PONEDORAS) return true;
-            if (tipo === TipoNegocio.DESCARTE && v.tipo_producto === 'AVES') return true;
-            return false;
-          }
-          return v.tipo_negocio === tipo;
-        });
-      }
+      ventas = ventas.filter((v: any) => {
+        // Si tiene tipo_negocio, filtro estricto
+        if (v.tipo_negocio) return v.tipo_negocio === tipo;
+
+        // Si NO tiene tipo_negocio, usamos lógica quirúrgica por producto
+        if (v.tipo_producto === 'AVES') {
+          return tipo === TipoNegocio.DESCARTE;
+        } else {
+          return tipo === TipoNegocio.PONEDORAS;
+        }
+      });
+    }
 
       // Ordenar por fecha descendente en memoria de forma robusta
       ventas.sort((a: any, b: any) => {
@@ -994,37 +1009,39 @@ class ApiService {
 
         const insumoData = insumoDoc.data();
         if (insumoData.stock_actual < consumo.cantidad) {
-          throw new Error(`Stock insuficiente. Disponible: ${insumoData.stock_actual}`);
+          throw new Error(`Stock insuficiente. Disponibles: ${insumoData.stock_actual}`);
         }
 
         // 2. Crear registro de consumo
-        const consumoRef = doc(collection(db, 'CONSUMO_INSUMO'));
-        transaction.set(consumoRef, {
-          ...consumo,
-          fecha_creacion: new Date().toISOString()
-        });
+      const consumoRef = doc(collection(db, 'CONSUMO_INSUMO'));
+      transaction.set(consumoRef, {
+        ...consumo,
+        tipo_negocio: consumo.tipo_negocio || this.currentTipoNegocio,
+        fecha_creacion: new Date().toISOString()
+      });
 
-        // 3. Descontar stock
-        transaction.update(insumoRef, {
-          stock_actual: insumoData.stock_actual - consumo.cantidad
-        });
+      // 3. Descontar stock
+      transaction.update(insumoRef, {
+        stock_actual: insumoData.stock_actual - consumo.cantidad
+      });
 
-        // 4. Generar Gasto Automático
-        const gastoRef = doc(collection(db, 'GASTOS'));
-        const costoTotal = consumo.cantidad * (insumoData.precio_unitario || 0);
-        
-        transaction.set(gastoRef, {
-          fecha: consumo.fecha,
-          concepto: `Consumo: ${insumoData.nombre_producto}`,
-          categoria: 'ALIMENTACION', // O sanitarios, según tipo
-          total: costoTotal,
-          lote_id: consumo.lote_id,
-          tipo_gasto: 'CONSUMO_LOTE',
-          insumo_id: consumo.insumo_id,
-          cantidad: consumo.cantidad,
-          precio_unitario: insumoData.precio_unitario,
-          fecha_creacion: new Date().toISOString()
-        });
+      // 4. Generar Gasto Automático
+      const gastoRef = doc(collection(db, 'GASTOS'));
+      const costoTotal = consumo.cantidad * (insumoData.precio_unitario || 0);
+      
+      transaction.set(gastoRef, {
+        fecha: consumo.fecha,
+        concepto: `Consumo: ${insumoData.nombre_producto}`,
+        categoria: 'ALIMENTACION', // O sanitarios, según tipo
+        total: costoTotal,
+        lote_id: consumo.lote_id,
+        tipo_gasto: 'CONSUMO_LOTE',
+        tipo_negocio: consumo.tipo_negocio || this.currentTipoNegocio,
+        insumo_id: consumo.insumo_id,
+        cantidad: consumo.cantidad,
+        precio_unitario: insumoData.precio_unitario,
+        fecha_creacion: new Date().toISOString()
+      });
       });
 
       return { success: true, data: consumo };
@@ -1906,6 +1923,30 @@ async deleteVenta(id: string): Promise<ApiResponse<any>> {
   }
 }
 
+  // Utilidad para migrar/limpiar registros antiguos sin tipo_negocio
+  async tagOldSales(): Promise<ApiResponse<any>> {
+    try {
+      const q = query(collection(db, 'VENTAS'));
+      const snapshot = await getDocs(q);
+      const batch = writeBatch(db);
+      let count = 0;
+
+      snapshot.docs.forEach(d => {
+        const data = d.data();
+        if (!data.tipo_negocio) {
+          const tipo = data.tipo_producto === 'AVES' ? TipoNegocio.DESCARTE : TipoNegocio.PONEDORAS;
+          batch.update(d.ref, { tipo_negocio: tipo });
+          count++;
+        }
+      });
+
+      if (count > 0) await batch.commit();
+      return { success: true, data: { tagged: count } };
+    } catch (error: any) {
+      return { success: false, error: error.message };
+    }
+  }
 }
 
-export default new ApiService();
+const apiService = new ApiService();
+export default apiService;

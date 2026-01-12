@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 import apiService from '../services/api-service';
 import { useAuth } from '../context/AuthContext';
+import { useBusiness } from '../context/BusinessContext';
 import { Ionicons } from '@expo/vector-icons';
 
 import { DrawerNavigationProp } from '@react-navigation/drawer';
@@ -27,12 +28,13 @@ export default function InsumosScreen({ navigation }: Props) {
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
     const { user } = useAuth();
+    const { tipoNegocio } = useBusiness();
     const isAdmin = user?.role === 'ADMIN' || user?.role === 'GERENTE';
 
     const loadInsumos = async () => {
         setLoading(true);
         try {
-            const response = await apiService.getInsumos();
+            const response = await apiService.getInsumos(tipoNegocio);
             if (response.success && response.data) {
                 setInsumos(response.data);
             } else {
@@ -48,7 +50,7 @@ export default function InsumosScreen({ navigation }: Props) {
 
     useEffect(() => {
         loadInsumos();
-    }, []);
+    }, [tipoNegocio]);
 
     const onRefresh = () => {
         setRefreshing(true);

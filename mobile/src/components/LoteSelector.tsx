@@ -7,14 +7,16 @@ interface Lote {
     nombre: string;
     tipo_ave: string;
     poblacion_actual: number;
+    tipo_negocio?: string;
 }
 
 interface LoteSelectorProps {
     onSelect: (lote: Lote) => void;
     selectedLoteId?: string;
+    tipoNegocio?: string;
 }
 
-export default function LoteSelector({ onSelect, selectedLoteId }: LoteSelectorProps) {
+export default function LoteSelector({ onSelect, selectedLoteId, tipoNegocio }: LoteSelectorProps) {
     const [lotes, setLotes] = useState<Lote[]>([]);
     const [loading, setLoading] = useState(true);
     const [modalVisible, setModalVisible] = useState(false);
@@ -27,25 +29,31 @@ export default function LoteSelector({ onSelect, selectedLoteId }: LoteSelectorP
     const loadLotes = async () => {
         setLoading(true);
         const response = await apiService.getLotes();
+        let data: Lote[] = [];
+
         if (response.success && response.data) {
-            setLotes(response.data);
-            if (selectedLoteId) {
-                const found = response.data.find((l: Lote) => l.id === selectedLoteId);
-                if (found) setSelectedLote(found);
-            }
+            data = response.data;
             // Cachear lotes
-            await apiService.cacheMasterData({ lotes: response.data });
+            await apiService.cacheMasterData({ lotes: data });
         } else {
             // Intentar cargar de caché
-            const cached = await apiService.getCachedLotes();
-            if (cached.length > 0) {
-                setLotes(cached);
-                if (selectedLoteId) {
-                    const found = cached.find((l: Lote) => l.id === selectedLoteId);
-                    if (found) setSelectedLote(found);
-                }
-            }
+            data = await apiService.getCachedLotes();
         }
+
+        // Filtrar por tipo de negocio si se proporciona
+        if (tipoNegocio) {
+            data = data.filter(l => {
+                if (!l.tipo_negocio) return tipoNegocio === 'PONEDORAS';
+                return l.tipo_negocio === tipoNegocio;
+            });
+        }
+
+        setLotes(data);
+        if (selectedLoteId) {
+            const found = data.find((l: Lote) => l.id === selectedLoteId);
+            if (found) setSelectedLote(found);
+        }
+
         setLoading(false);
     };
 

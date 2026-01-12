@@ -5,6 +5,7 @@ import LoteSelector from '../components/LoteSelector';
 import apiService from '../services/api-service';
 import { DrawerNavigationProp } from '@react-navigation/drawer';
 import { RootDrawerParamList } from '../navigation/AppNavigator';
+import { useBusiness, TipoNegocio } from '../context/BusinessContext';
 
 type CreateVentaScreenNavigationProp = DrawerNavigationProp<RootDrawerParamList, 'CreateVenta'>;
 
@@ -13,10 +14,11 @@ interface Props {
 }
 
 export default function CreateVentaScreen({ navigation }: Props) {
+    const { tipoNegocio } = useBusiness();
     const [loteId, setLoteId] = useState('');
     const [loteNombre, setLoteNombre] = useState('');
     const [loteTipo, setLoteTipo] = useState('');
-    const [tipoProducto, setTipoProducto] = useState('AVES'); // 'AVES' o 'HUEVOS'
+    const [tipoProducto, setTipoProducto] = useState(tipoNegocio === TipoNegocio.DESCARTE ? 'AVES' : 'HUEVOS'); // 'AVES' o 'HUEVOS'
     const [tamañoHuevo, setTamañoHuevo] = useState('AAA');
     const [cantidad, setCantidad] = useState('');
     const [precioUnitario, setPrecioUnitario] = useState('');
@@ -57,6 +59,7 @@ export default function CreateVentaScreen({ navigation }: Props) {
             lote_id: loteId,
             lote_nombre: loteNombre,
             tipo_producto: tipoProducto,
+            tipo_negocio: tipoNegocio,
             tamaño_huevo: tipoProducto === 'HUEVOS' ? tamañoHuevo : null,
             cantidad: cant,
             precio_unitario: precio,
@@ -131,6 +134,7 @@ export default function CreateVentaScreen({ navigation }: Props) {
                         }
                     }}
                     selectedLoteId={loteId}
+                    tipoNegocio={tipoNegocio}
                 />
 
                 <Text style={styles.label}>¿Qué está vendiendo? *</Text>

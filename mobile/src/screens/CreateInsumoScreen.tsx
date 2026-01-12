@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 import { Picker } from '@react-native-picker/picker';
 import apiService from '../services/api-service';
+import { useBusiness } from '../context/BusinessContext';
 import { DrawerNavigationProp } from '@react-navigation/drawer';
 import { RootDrawerParamList } from '../navigation/AppNavigator';
 
@@ -21,6 +22,7 @@ interface Props {
 }
 
 export default function CreateInsumoScreen({ navigation }: Props) {
+    const { tipoNegocio } = useBusiness();
     const [nombre, setNombre] = useState('');
     const [tipo, setTipo] = useState('ALIMENTO');
     const [stock, setStock] = useState('');
@@ -38,6 +40,7 @@ export default function CreateInsumoScreen({ navigation }: Props) {
         const data = {
             nombre_producto: nombre,
             tipo,
+            tipo_negocio: tipoNegocio,
             stock_actual: parseFloat(stock),
             stock_minimo: parseFloat(stockMinimo || '0'),
             unidad_medida: unidadMedida,
