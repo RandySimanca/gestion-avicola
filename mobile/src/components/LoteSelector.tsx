@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Modal, FlatList, ActivityIndicator } from 'react-native';
 import apiService from '../services/api-service';
+import { TipoNegocio } from '../types/business';
 
 interface Lote {
     id: string;
@@ -13,7 +14,7 @@ interface Lote {
 interface LoteSelectorProps {
     onSelect: (lote: Lote) => void;
     selectedLoteId?: string;
-    tipoNegocio?: string;
+    tipoNegocio?: TipoNegocio;
 }
 
 export default function LoteSelector({ onSelect, selectedLoteId, tipoNegocio }: LoteSelectorProps) {
@@ -28,30 +29,15 @@ export default function LoteSelector({ onSelect, selectedLoteId, tipoNegocio }: 
 
     const loadLotes = async () => {
         setLoading(true);
-        const response = await apiService.getLotes();
-        let data: Lote[] = [];
+        // Usar getLotesSimple que es más ligero y tiene caché integrado
+        const response = await apiService.getLotesSimple(tipoNegocio);
 
         if (response.success && response.data) {
-            data = response.data;
-            // Cachear lotes
-            await apiService.cacheMasterData({ lotes: data });
-        } else {
-            // Intentar cargar de caché
-            data = await apiService.getCachedLotes();
-        }
-
-        // Filtrar por tipo de negocio si se proporciona
-        if (tipoNegocio) {
-            data = data.filter(l => {
-                if (!l.tipo_negocio) return tipoNegocio === 'PONEDORAS';
-                return l.tipo_negocio === tipoNegocio;
-            });
-        }
-
-        setLotes(data);
-        if (selectedLoteId) {
-            const found = data.find((l: Lote) => l.id === selectedLoteId);
-            if (found) setSelectedLote(found);
+            setLotes(response.data);
+            if (selectedLoteId) {
+                const found = response.data.find((l: Lote) => l.id === selectedLoteId);
+                if (found) setSelectedLote(found);
+            }
         }
 
         setLoading(false);

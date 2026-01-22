@@ -1,16 +1,17 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, Alert, ActivityIndicator, ScrollView, SafeAreaView, TouchableOpacity, Dimensions } from 'react-native';
 import { useAuth } from '../context/AuthContext';
-import { useBusiness, TipoNegocio } from '../context/BusinessContext';
+import { useBusiness } from '../context/BusinessContext';
+import { TipoNegocio } from '../types/business';
 import apiService from '../services/api-service';
 
 const { width } = Dimensions.get('window');
 
 import { DrawerNavigationProp } from '@react-navigation/drawer';
 import { RootDrawerParamList } from '../navigation/AppNavigator';
-import { userInfo } from 'node:os';
 
 type HomeScreenNavigationProp = DrawerNavigationProp<RootDrawerParamList, 'Home'>;
+
 
 interface Props {
     navigation: HomeScreenNavigationProp;

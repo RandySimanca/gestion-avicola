@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, Alert, ActivityIndicator } from 'react-native';
 import { Picker } from '@react-native-picker/picker';
+import DateTimePicker from '@react-native-community/datetimepicker';
+import { Ionicons } from '@expo/vector-icons';
 import apiService from '../services/api-service';
 
 export default function EditarVentaScreen({ navigation, route }: any) {
@@ -12,6 +14,8 @@ export default function EditarVentaScreen({ navigation, route }: any) {
     const [formaPago, setFormaPago] = useState(venta.forma_pago);
     const [observaciones, setObservaciones] = useState(venta.observaciones || '');
     const [abono, setAbono] = useState(venta.abono?.toString() || '0');
+    const [fecha, setFecha] = useState(new Date(venta.fecha));
+    const [showDatePicker, setShowDatePicker] = useState(false);
     const [loading, setLoading] = useState(false);
 
     const handleSubmit = async () => {
@@ -49,6 +53,7 @@ export default function EditarVentaScreen({ navigation, route }: any) {
             abono: abonoVal,
             cliente,
             forma_pago: formaPago,
+            fecha: fecha.toISOString(),
             observaciones: observaciones.trim() || null,
             lote_nombre: venta.lote_nombre // Asegurar que se mantenga
         };
@@ -83,6 +88,32 @@ export default function EditarVentaScreen({ navigation, route }: any) {
             <View style={styles.form}>
                 <Text style={styles.title}>Editar Venta</Text>
                 <Text style={styles.subtitle}>Lote: {venta.lote_nombre || 'N/A'}</Text>
+
+                <Text style={styles.label}>Fecha de la Venta *</Text>
+                <TouchableOpacity
+                    style={styles.datePickerButton}
+                    onPress={() => setShowDatePicker(true)}
+                >
+                    <Ionicons name="calendar-outline" size={20} color="#2c3e50" style={{ marginRight: 10 }} />
+                    <Text style={styles.datePickerText}>
+                        {fecha.toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric' })}
+                    </Text>
+                </TouchableOpacity>
+
+                {showDatePicker && (
+                    <DateTimePicker
+                        value={fecha}
+                        mode="date"
+                        display="default"
+                        onChange={(event, selectedDate) => {
+                            setShowDatePicker(false);
+                            if (selectedDate) {
+                                setFecha(selectedDate);
+                            }
+                        }}
+                        maximumDate={new Date()}
+                    />
+                )}
 
                 <Text style={styles.label}>
                     {venta.tipo_producto === 'HUEVOS' ? 'Cantidad de Huevos *' : 'Cantidad de Aves *'}
@@ -209,6 +240,19 @@ const styles = StyleSheet.create({
         padding: 12,
         fontSize: 16,
         backgroundColor: '#fff',
+        color: '#2c3e50',
+    },
+    datePickerButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        borderWidth: 1,
+        borderColor: '#ddd',
+        borderRadius: 8,
+        padding: 12,
+        backgroundColor: '#fff',
+    },
+    datePickerText: {
+        fontSize: 16,
         color: '#2c3e50',
     },
     pickerContainer: {

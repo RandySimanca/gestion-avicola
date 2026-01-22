@@ -1,0 +1,43 @@
+﻿node.exe : 
+(node:51012) 
+ExperimentalWarning: 
+CommonJS module 
+C:\Program Files\nodej
+s\node_modules\npm\nod
+e_modules\debug\src\no
+de.js is loading ES 
+Module C:\Program File
+s\nodejs\node_modules\
+npm\node_modules\suppo
+rts-color\index.js 
+using require().
+En C:\Program 
+Files\nodejs\npx.ps1: 
+29 Carácter: 3
++   & $NODE_EXE 
+$NPX_CLI_JS $args
++   ~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~
+    + CategoryInfo    
+          : NotSpeci  
+  fied: ((node:5101   
+ 2) Ex...sing requ    
+ire().:String) []    
+, RemoteException
+    + FullyQualifiedE 
+   rrorId : NativeCo  
+  mmandError
+ 
+Support for loading 
+ES Module in 
+require() is an 
+experimental feature 
+and might change at 
+any time
+(Use `node 
+--trace-warnings ...` 
+to show where the 
+warning was created)
+src/navigation/AppNavigator.tsx(8,23): error TS2459: Module '"../context/BusinessContext"' declares 'TipoNegocio' locally, but it is not exported.
+src/screens/CreateVentaScreen.tsx(8,23): error TS2459: Module '"../context/BusinessContext"' declares 'TipoNegocio' locally, but it is not exported.
+src/screens/HomeScreen.tsx(4,23): error TS2459: Module '"../context/BusinessContext"' declares 'TipoNegocio' locally, but it is not exported.

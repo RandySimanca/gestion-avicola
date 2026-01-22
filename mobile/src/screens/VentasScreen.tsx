@@ -27,6 +27,7 @@ interface Venta {
   abono?: number;
   abonos?: Array<{ monto: number; fecha: string }>;
   observaciones?: string;
+  isPending?: boolean;
 }
 
 export default function VentasScreen({ navigation }: any) {
@@ -166,19 +167,28 @@ export default function VentasScreen({ navigation }: any) {
               <Ionicons name="document-text-outline" size={20} color="#27ae60" />
             </TouchableOpacity>
             <TouchableOpacity
-              style={styles.iconButton}
-              onPress={() => handleEditar(item)}
+              style={[styles.iconButton, item.isPending && styles.disabledButton]}
+              onPress={() => !item.isPending && handleEditar(item)}
+              disabled={item.isPending}
             >
-              <Ionicons name="pencil" size={20} color="#3498db" />
+              <Ionicons name="pencil" size={20} color={item.isPending ? "#bdc3c7" : "#3498db"} />
             </TouchableOpacity>
             <TouchableOpacity
-              style={styles.iconButton}
-              onPress={() => handleEliminar(item)}
+              style={[styles.iconButton, item.isPending && styles.disabledButton]}
+              onPress={() => !item.isPending && handleEliminar(item)}
+              disabled={item.isPending}
             >
-              <Ionicons name="trash" size={20} color="#e74c3c" />
+              <Ionicons name="trash" size={20} color={item.isPending ? "#bdc3c7" : "#e74c3c"} />
             </TouchableOpacity>
           </View>
         </View>
+
+        {item.isPending && (
+          <View style={styles.pendingBadge}>
+            <Ionicons name="cloud-offline-outline" size={14} color="#e67e22" />
+            <Text style={styles.pendingBadgeText}>Pendiente de sincronizar</Text>
+          </View>
+        )}
 
         <View style={styles.ventaBody}>
           <View style={styles.ventaRow}>
@@ -520,5 +530,26 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: '#2c3e50',
     fontWeight: '500',
+  },
+  pendingBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#fff3e0',
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    marginHorizontal: 16,
+    marginBottom: 8,
+    borderRadius: 4,
+    borderWidth: 1,
+    borderColor: '#ffe0b2',
+  },
+  pendingBadgeText: {
+    fontSize: 12,
+    color: '#e67e22',
+    fontWeight: '600',
+    marginLeft: 4,
+  },
+  disabledButton: {
+    opacity: 0.5,
   },
 });

@@ -101,6 +101,7 @@ export default function AlimentoScreen({ navigation }: any) {
                 fecha: new Date().toISOString(),
                 mortalidad_dia: 0,
                 alimento_consumido_kg: cantidad,
+                huevos_totales: 0,
                 observaciones: observaciones.trim() 
                     ? `${detalle}. ${observaciones}` 
                     : detalle

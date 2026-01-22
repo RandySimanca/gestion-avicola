@@ -1,0 +1,36 @@
+﻿node.exe : (node:50316) 
+ExperimentalWarning: 
+CommonJS module C:\Program 
+Files\nodejs\node_modules\n
+pm\node_modules\debug\src\n
+ode.js is loading ES 
+Module C:\Program Files\nod
+ejs\node_modules\npm\node_m
+odules\supports-color\index
+.js using require().
+En C:\Program 
+Files\nodejs\npx.ps1: 29 
+Carácter: 3
++   & $NODE_EXE 
+$NPX_CLI_JS $args
++   ~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~
+    + CategoryInfo         
+     : NotSpecified: ((no  
+  de:50316) Ex...sing re   
+ quire().:String) [], R    
+emoteException
+    + FullyQualifiedErrorI 
+   d : NativeCommandError
+ 
+Support for loading ES 
+Module in require() is an 
+experimental feature and 
+might change at any time
+(Use `node 
+--trace-warnings ...` to 
+show where the warning was 
+created)
+src/context/BusinessContext.tsx(36,9): error TS2304: Cannot find name 'apiService'.
+src/context/BusinessContext.tsx(38,9): error TS2304: Cannot find name 'apiService'.
+src/context/BusinessContext.tsx(51,7): error TS2304: Cannot find name 'apiService'.

@@ -22,7 +22,7 @@ import {
   onAuthStateChanged
 } from 'firebase/auth';
 import { db, auth } from '../config/firebaseConfig';
-import { TipoNegocio } from '../context/BusinessContext';
+import { TipoNegocio } from '../types/business';
 
 export interface ApiResponse<T> {
   success: boolean;
@@ -151,76 +151,124 @@ class ApiService {
       const querySnapshot = await getDocs(qLotes);
       const lotes = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
 
-      // 2. Obtener Fincas, Galpones, Registros, Gastos y Ventas (también filtrados)
-      let qRegistros = query(collection(db, 'REGISTRO_DIARIO_PRODUCCION'));
-      let qGastos = query(collection(db, 'GASTOS'));
-      let qVentas = query(collection(db, 'VENTAS'));
+      // Cachear lotes básicos para uso offline rápido
+      await this.cacheMasterData({ lotes });
 
+      // 2. Obtener Fincas, Galpones, Registros, Gastos y Ventas (también filtrados)
+      // ... (resto del código igual, pero con try-catch interno para no fallar todo si falla el enriquecimiento)
+      try {
+        let qRegistros = query(collection(db, 'REGISTRO_DIARIO_PRODUCCION'));
+        let qGastos = query(collection(db, 'GASTOS'));
+        let qVentas = query(collection(db, 'VENTAS'));
+
+        if (tipo) {
+          qRegistros = query(collection(db, 'REGISTRO_DIARIO_PRODUCCION'), where('tipo_negocio', '==', tipo));
+          qGastos = query(collection(db, 'GASTOS'), where('tipo_negocio', '==', tipo));
+          qVentas = query(collection(db, 'VENTAS'), where('tipo_negocio', '==', tipo));
+        }
+
+        const [fincasRes, galponesRes, registrosSnap, gastosSnap, ventasSnap] = await Promise.all([
+          this.getFincas(),
+          this.getGalpones(),
+          getDocs(qRegistros),
+          getDocs(qGastos),
+          getDocs(qVentas)
+        ]);
+
+        const fincasMap = new Map(fincasRes.data?.map((f: any) => [f.id, f.nombre]) || []);
+        const galponesMap = new Map(galponesRes.data?.map((g: any) => [g.id, g.nombre]) || []);
+        
+        const mortalidadPorLote = new Map<string, number>();
+        registrosSnap.docs.forEach(doc => {
+          const data = doc.data();
+          const loteId = data.lote_id;
+          const mortalidad = Number(data.mortalidad_dia) || 0;
+          if (loteId) {
+            mortalidadPorLote.set(loteId, (mortalidadPorLote.get(loteId) || 0) + mortalidad);
+          }
+        });
+
+        const gastosPorLote = new Map<string, number>();
+        gastosSnap.docs.forEach(doc => {
+          const data = doc.data();
+          if (data.lote_id) {
+            gastosPorLote.set(data.lote_id, (gastosPorLote.get(data.lote_id) || 0) + (Number(data.total) || 0));
+          }
+        });
+
+        const ventasPorLote = new Map<string, number>();
+        ventasSnap.docs.forEach(doc => {
+          const data = doc.data();
+          if (data.lote_id) {
+            const monto = data.forma_pago === 'CREDITO' ? (Number(data.abono) || 0) : (Number(data.total) || 0);
+            ventasPorLote.set(data.lote_id, (ventasPorLote.get(data.lote_id) || 0) + monto);
+          }
+        });
+
+        const lotesEnriquecidos = lotes.map((lote: any) => {
+          const totalInvertido = gastosPorLote.get(lote.id) || 0;
+          const totalVendido = ventasPorLote.get(lote.id) || 0;
+          const roi = totalInvertido > 0 ? Math.min(100, (totalVendido / totalInvertido) * 100) : 0;
+
+          return {
+            ...lote,
+            finca_nombre: lote.finca_nombre || fincasMap.get(lote.finca_id) || 'N/A',
+            galpon_nombre: lote.galpon_nombre || galponesMap.get(lote.galpon_id) || 'N/A',
+            mortalidad_acumulada: mortalidadPorLote.get(lote.id) || 0,
+            roi_porcentaje: roi,
+            total_invertido: totalInvertido,
+            total_vendido: totalVendido
+          };
+        });
+
+        return { success: true, data: lotesEnriquecidos };
+      } catch (enrichError) {
+        console.warn('Error enriqueciendo lotes, devolviendo básicos:', enrichError);
+        return { success: true, data: lotes, message: 'Datos parciales (offline)' };
+      }
+    } catch (error: any) {
+      // Si falla todo, intentar cargar de caché
+      const cached = await this.getCachedLotes();
+      if (cached.length > 0) {
+        return { success: true, data: cached, message: 'Cargado desde caché (offline)' };
+      }
+      return { success: false, error: error.message };
+    }
+  }
+
+  async getLotesSimple(tipoNegocio?: TipoNegocio): Promise<ApiResponse<any[]>> {
+    try {
+      const tipo = tipoNegocio || this.currentTipoNegocio;
+      
+      // Traer TODOS los lotes para asegurar que el caché local esté completo
+      // El filtrado se hace en memoria para robustez offline
+      const q = query(collection(db, 'LOTE'));
+      const querySnapshot = await getDocs(q);
+      const allLotes = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      
+      // Cachear todos los lotes obtenidos (mezclando con los existentes)
+      await this.cacheMasterData({ lotes: allLotes });
+
+      // Filtrar por tipo de negocio en memoria
+      let filtered = allLotes;
       if (tipo) {
-        qRegistros = query(collection(db, 'REGISTRO_DIARIO_PRODUCCION'), where('tipo_negocio', '==', tipo));
-        qGastos = query(collection(db, 'GASTOS'), where('tipo_negocio', '==', tipo));
-        qVentas = query(collection(db, 'VENTAS'), where('tipo_negocio', '==', tipo));
+        filtered = allLotes.filter((l: any) => 
+          l.tipo_negocio === tipo || (!l.tipo_negocio && tipo === TipoNegocio.PONEDORAS)
+        );
       }
 
-      const [fincasRes, galponesRes, registrosSnap, gastosSnap, ventasSnap] = await Promise.all([
-        this.getFincas(),
-        this.getGalpones(),
-        getDocs(qRegistros),
-        getDocs(qGastos),
-        getDocs(qVentas)
-      ]);
-
-      const fincasMap = new Map(fincasRes.data?.map((f: any) => [f.id, f.nombre]) || []);
-      const galponesMap = new Map(galponesRes.data?.map((g: any) => [g.id, g.nombre]) || []);
-      
-      // Calcular mortalidad acumulada por lote
-      const mortalidadPorLote = new Map<string, number>();
-      registrosSnap.docs.forEach(doc => {
-        const data = doc.data();
-        const loteId = data.lote_id;
-        const mortalidad = Number(data.mortalidad_dia) || 0;
-        if (loteId) {
-          mortalidadPorLote.set(loteId, (mortalidadPorLote.get(loteId) || 0) + mortalidad);
-        }
-      });
-
-      // Calcular ROI por lote
-      const gastosPorLote = new Map<string, number>();
-      gastosSnap.docs.forEach(doc => {
-        const data = doc.data();
-        if (data.lote_id) {
-          gastosPorLote.set(data.lote_id, (gastosPorLote.get(data.lote_id) || 0) + (Number(data.total) || 0));
-        }
-      });
-
-      const ventasPorLote = new Map<string, number>();
-      ventasSnap.docs.forEach(doc => {
-        const data = doc.data();
-        if (data.lote_id) {
-          const monto = data.forma_pago === 'CREDITO' ? (Number(data.abono) || 0) : (Number(data.total) || 0);
-          ventasPorLote.set(data.lote_id, (ventasPorLote.get(data.lote_id) || 0) + monto);
-        }
-      });
-
-      // 3. Enriquecer datos
-      const lotesEnriquecidos = lotes.map((lote: any) => {
-        const totalInvertido = gastosPorLote.get(lote.id) || 0;
-        const totalVendido = ventasPorLote.get(lote.id) || 0;
-        const roi = totalInvertido > 0 ? Math.min(100, (totalVendido / totalInvertido) * 100) : 0;
-
-        return {
-          ...lote,
-          finca_nombre: lote.finca_nombre || fincasMap.get(lote.finca_id) || 'N/A',
-          galpon_nombre: lote.galpon_nombre || galponesMap.get(lote.galpon_id) || 'N/A',
-          mortalidad_acumulada: mortalidadPorLote.get(lote.id) || 0,
-          roi_porcentaje: roi,
-          total_invertido: totalInvertido,
-          total_vendido: totalVendido
-        };
-      });
-
-      return { success: true, data: lotesEnriquecidos };
+      return { success: true, data: filtered };
     } catch (error: any) {
+      console.error('Error en getLotesSimple:', error);
+      const cached = await this.getCachedLotes();
+      if (cached.length > 0) {
+        const tipo = tipoNegocio || this.currentTipoNegocio;
+        // Filtrado robusto en caché
+        const filtered = tipo ? cached.filter((l: any) => 
+          l.tipo_negocio === tipo || (!l.tipo_negocio && tipo === TipoNegocio.PONEDORAS)
+        ) : cached;
+        return { success: true, data: filtered, message: 'Cargado desde caché (offline)' };
+      }
       return { success: false, error: error.message };
     }
   }
@@ -250,9 +298,21 @@ class ApiService {
 
   async cacheMasterData(data: any): Promise<void> {
     try {
-      if (data.lotes) await AsyncStorage.setItem('cached_lotes', JSON.stringify(data.lotes));
+      if (data.lotes) {
+        const existingLotes = await this.getCachedLotes();
+        const lotesMap = new Map();
+        
+        // Agregar existentes al mapa
+        existingLotes.forEach((l: any) => lotesMap.set(l.id, l));
+        
+        // Sobrescribir/Agregar nuevos
+        data.lotes.forEach((l: any) => lotesMap.set(l.id, l));
+        
+        const mergedLotes = Array.from(lotesMap.values());
+        await AsyncStorage.setItem('cached_lotes', JSON.stringify(mergedLotes));
+      }
     } catch (e) {
-      console.error(e);
+      console.error('Error en cacheMasterData:', e);
     }
   }
 
@@ -317,8 +377,18 @@ async getInsumos(tipoNegocio?: TipoNegocio): Promise<ApiResponse<any[]>> {
       });
     }
 
+    // Cachear insumos
+    await AsyncStorage.setItem('cached_insumos', JSON.stringify(insumos));
+
     return { success: true, data: insumos };
   } catch (error: any) {
+    // Fallback a caché
+    try {
+      const cached = await AsyncStorage.getItem('cached_insumos');
+      if (cached) {
+        return { success: true, data: JSON.parse(cached), message: 'Cargado desde caché (offline)' };
+      }
+    } catch (e) {}
     return { success: false, error: error.message };
   }
 }
@@ -851,6 +921,13 @@ async getInsumos(tipoNegocio?: TipoNegocio): Promise<ApiResponse<any[]>> {
 
       return { success: true, data: venta };
     } catch (error: any) {
+      console.error('Error en createVenta:', error);
+      const isNetError = error.code === 'unavailable' || error.message?.includes('network') || error.message?.includes('failed to fetch');
+      
+      if (isNetError) {
+        await this.savePendingRecord('ventas', venta);
+        return { success: true, data: venta, isNetworkError: true };
+      }
       return { success: false, error: error.message };
     }
   }
@@ -901,38 +978,40 @@ async getInsumos(tipoNegocio?: TipoNegocio): Promise<ApiResponse<any[]>> {
   }
 
   async getVentas(tipoNegocio?: TipoNegocio): Promise<ApiResponse<any[]>> {
+    const tipo = tipoNegocio || this.currentTipoNegocio;
     try {
-      const tipo = tipoNegocio || this.currentTipoNegocio;
-      
-      // Para compatibilidad con datos viejos que no tienen tipo_negocio o fecha,
-      // traemos todo y filtramos/ordenamos en memoria.
-      // Firestore excluye documentos si el campo del orderBy no existe.
+      // 1. Obtener pendientes locales primero
+      const pending = await this.getPendingRecords('ventas');
+      const formattedPending = pending.map((v: any, index: number) => ({
+        ...v,
+        id: v.id || `pending_venta_${Date.now()}_${index}`,
+        isPending: true
+      }));
+
+      // 2. Intentar obtener de Firestore
       const q = query(collection(db, 'VENTAS'));
       const snapshot = await getDocs(q);
       
       let ventas = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
       
       if (tipo) {
-      ventas = ventas.filter((v: any) => {
-        // Si tiene tipo_negocio, filtro estricto
-        if (v.tipo_negocio) return v.tipo_negocio === tipo;
-
-        // Si NO tiene tipo_negocio, usamos lógica quirúrgica por producto
-        if (v.tipo_producto === 'AVES') {
-          return tipo === TipoNegocio.DESCARTE;
-        } else {
+        ventas = ventas.filter((v: any) => {
+          if (v.tipo_negocio) return v.tipo_negocio === tipo;
+          if (v.tipo_producto === 'AVES') return tipo === TipoNegocio.DESCARTE;
           return tipo === TipoNegocio.PONEDORAS;
-        }
-      });
-    }
+        });
+      }
 
-      // Ordenar por fecha descendente en memoria de forma robusta
-      ventas.sort((a: any, b: any) => {
+      // 3. Mezclar con pendientes (filtrados por tipo si aplica)
+      const filteredPending = tipo ? formattedPending.filter((v: any) => v.tipo_negocio === tipo) : formattedPending;
+      const allVentas = [...filteredPending, ...ventas];
+
+      // Ordenar por fecha descendente
+      allVentas.sort((a: any, b: any) => {
         const getFecha = (item: any) => {
           if (!item) return 0;
           const f = item.fecha || item.fecha_creacion;
           if (!f) return 0;
-          // Manejar si es un Timestamp de Firebase
           if (typeof f === 'object' && f.seconds) return f.seconds * 1000;
           const parsed = new Date(f).getTime();
           return isNaN(parsed) ? 0 : parsed;
@@ -940,9 +1019,38 @@ async getInsumos(tipoNegocio?: TipoNegocio): Promise<ApiResponse<any[]>> {
         return getFecha(b) - getFecha(a);
       });
       
-      return { success: true, data: ventas };
+      // Cachear ventas exitosas (solo las de la nube)
+      await AsyncStorage.setItem('cached_ventas', JSON.stringify(ventas));
+      
+      return { success: true, data: allVentas };
     } catch (error: any) {
       console.error('Error en getVentas:', error);
+      
+      try {
+        const cached = await AsyncStorage.getItem('cached_ventas');
+        const pending = await this.getPendingRecords('ventas');
+        
+        let ventas: any[] = cached ? JSON.parse(cached) : [];
+        const formattedPending = pending.map((v: any, index: number) => ({
+          ...v,
+          id: v.id || `pending_venta_${Date.now()}_${index}`,
+          isPending: true
+        }));
+
+        if (tipo) {
+          ventas = ventas.filter((v: any) => {
+            if (v.tipo_negocio) return v.tipo_negocio === (tipo as any);
+            if (v.tipo_producto === 'AVES') return (tipo as any) === TipoNegocio.DESCARTE;
+            return (tipo as any) === TipoNegocio.PONEDORAS;
+          });
+        }
+
+        const filteredPending = tipo ? formattedPending.filter((v: any) => v.tipo_negocio === tipo) : formattedPending;
+        const allVentas = [...filteredPending, ...ventas];
+
+        return { success: true, data: allVentas, message: 'Cargado desde caché (offline)' } as any;
+      } catch (e) {}
+
       return { success: false, error: error.message };
     }
   }
@@ -954,13 +1062,13 @@ async getInsumos(tipoNegocio?: TipoNegocio): Promise<ApiResponse<any[]>> {
         const ventaSnap = await transaction.get(ventaRef);
         if (!ventaSnap.exists()) throw new Error('Venta no encontrada');
         
-        const ventaAnterior = ventaSnap.data();
+        const ventaAnterior = ventaSnap.data() as any;
         const loteId = nuevosDatos.lote_id || ventaAnterior.lote_id;
         const loteRef = doc(db, 'LOTE', loteId);
         const loteSnap = await transaction.get(loteRef);
         if (!loteSnap.exists()) throw new Error('Lote no encontrado');
         
-        const loteData = loteSnap.data();
+        const loteData = loteSnap.data() as any;
         let poblacionActual = loteData.poblacion_actual ?? loteData.poblacion_inicial;
         
         // Revertir cantidad anterior
@@ -1258,11 +1366,21 @@ async deleteRegistroDiario(id: string): Promise<ApiResponse<any>> {
   // Métodos para Fincas
   async getFincas(): Promise<ApiResponse<any[]>> {
     try {
-      const q = query(collection(db, 'FINCA'));
-      const querySnapshot = await getDocs(q);
+      const querySnapshot = await getDocs(collection(db, 'FINCA'));
       const fincas = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      
+      // Cachear fincas
+      await AsyncStorage.setItem('cached_fincas', JSON.stringify(fincas));
+      
       return { success: true, data: fincas };
     } catch (error: any) {
+      // Fallback a caché
+      try {
+        const cached = await AsyncStorage.getItem('cached_fincas');
+        if (cached) {
+          return { success: true, data: JSON.parse(cached), message: 'Cargado desde caché (offline)' };
+        }
+      } catch (e) {}
       return { success: false, error: error.message };
     }
   }
@@ -1285,15 +1403,47 @@ async deleteRegistroDiario(id: string): Promise<ApiResponse<any>> {
     }
   }
 
+  async getCachedFincas(): Promise<any[]> {
+    try {
+      const jsonValue = await AsyncStorage.getItem('cached_fincas');
+      return jsonValue != null ? JSON.parse(jsonValue) : [];
+    } catch(e) {
+      return [];
+    }
+  }
+
   // Métodos para Galpones
   async getGalpones(): Promise<ApiResponse<any[]>> {
     try {
-      const q = query(collection(db, 'GALPON'));
-      const querySnapshot = await getDocs(q);
+      const querySnapshot = await getDocs(collection(db, 'GALPON'));
       const galpones = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      
+      // Cachear galpones
+      await AsyncStorage.setItem('cached_galpones', JSON.stringify(galpones));
+      
       return { success: true, data: galpones };
     } catch (error: any) {
+      // Fallback a caché
+      try {
+        const cached = await AsyncStorage.getItem('cached_galpones');
+        if (cached) {
+          return { success: true, data: JSON.parse(cached), message: 'Cargado desde caché (offline)' };
+        }
+      } catch (e) {}
       return { success: false, error: error.message };
+    }
+  }
+
+  async getCachedGalpones(fincaId?: string): Promise<any[]> {
+    try {
+      const jsonValue = await AsyncStorage.getItem('cached_galpones');
+      if (jsonValue != null) {
+        const all = JSON.parse(jsonValue);
+        return fincaId ? all.filter((g: any) => g.finca_id === fincaId) : all;
+      }
+      return [];
+    } catch(e) {
+      return [];
     }
   }
 
@@ -1408,6 +1558,42 @@ async deleteRegistroDiario(id: string): Promise<ApiResponse<any>> {
     try {
       await deleteDoc(doc(db, 'USUARIOS', id));
       return { success: true, data: { id } };
+    } catch (error: any) {
+      return { success: false, error: error.message };
+    }
+  }
+
+  // Métodos para Sanidad
+  async getCalendarioSanitario(loteId: string): Promise<ApiResponse<any[]>> {
+    try {
+      const q = query(collection(db, 'PROGRAMA_SANITARIO'), where('lote_id', '==', loteId));
+      const querySnapshot = await getDocs(q);
+      const registros = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      return { success: true, data: registros };
+    } catch (error: any) {
+      return { success: false, error: error.message };
+    }
+  }
+
+  async createAplicacionSanitaria(data: any): Promise<ApiResponse<any>> {
+    try {
+      const docRef = await addDoc(collection(db, 'APLICACION_SANITARIA'), {
+        ...data,
+        fecha_creacion: new Date().toISOString()
+      });
+      return { success: true, data: { id: docRef.id, ...data } };
+    } catch (error: any) {
+      return { success: false, error: error.message };
+    }
+  }
+
+  async createProgramaSanitario(data: any): Promise<ApiResponse<any>> {
+    try {
+      const docRef = await addDoc(collection(db, 'PROGRAMA_SANITARIO'), {
+        ...data,
+        fecha_creacion: new Date().toISOString()
+      });
+      return { success: true, data: { id: docRef.id, ...data } };
     } catch (error: any) {
       return { success: false, error: error.message };
     }
@@ -1776,6 +1962,56 @@ async deleteRegistroDiario(id: string): Promise<ApiResponse<any>> {
     }
   }
 
+  async getResumenContable(loteId: string): Promise<ApiResponse<any>> {
+    try {
+      // 1. Obtener Gastos (Egresos)
+      const qGastos = query(collection(db, 'GASTOS'), where('lote_id', '==', loteId));
+      const gastosSnap = await getDocs(qGastos);
+      const egresos = gastosSnap.docs.map(doc => ({
+        id: doc.id,
+        concepto: doc.data().concepto || doc.data().tipo_gasto,
+        fecha: doc.data().fecha,
+        cantidad: doc.data().cantidad || 1,
+        total: doc.data().total || 0
+      }));
+
+      // 2. Obtener Ventas (Ingresos)
+      const qVentas = query(collection(db, 'VENTAS'), where('lote_id', '==', loteId));
+      const ventasSnap = await getDocs(qVentas);
+      const ingresos = ventasSnap.docs.map(doc => ({
+        id: doc.id,
+        producto: doc.data().producto || doc.data().tipo_producto,
+        fecha: doc.data().fecha,
+        cantidad: doc.data().cantidad || 0,
+        total: doc.data().total || 0
+      }));
+
+      // 3. Cálculos
+      const totalEgresos = egresos.reduce((sum, e) => sum + e.total, 0);
+      const totalIngresos = ingresos.reduce((sum, i) => sum + i.total, 0);
+      const utilidadNeta = totalIngresos - totalEgresos;
+      const margen = totalIngresos > 0 ? (utilidadNeta / totalIngresos) * 100 : 0;
+
+      return {
+        success: true,
+        data: {
+          resumen: {
+            total_egresos: totalEgresos,
+            total_ingresos: totalIngresos,
+            utilidad_neta: utilidadNeta,
+            margen_porcentaje: margen
+          },
+          tablas: {
+            egresos: egresos.sort((a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime()),
+            ingresos: ingresos.sort((a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime())
+          }
+        }
+      };
+    } catch (error: any) {
+      return { success: false, error: error.message };
+    }
+  }
+
   async getLoteProfitability(loteId: string): Promise<ApiResponse<any>> {
     try {
       const loteRef = doc(db, 'LOTE', loteId);
@@ -1858,7 +2094,69 @@ async getPendingRecords(type?: string): Promise<any[]> {
     }
   }
 
-  async syncPendingData(): Promise<{success: boolean; error?: string}> { return { success: true }; }
+  async syncPendingData(): Promise<{success: boolean; error?: string}> {
+    try {
+      const types = ['ventas', 'gastos', 'produccion', 'mortalidad', 'compras'];
+      let totalSynced = 0;
+      let totalErrors = 0;
+
+      for (const type of types) {
+        const pending = await this.getPendingRecords(type);
+        if (pending.length === 0) continue;
+
+        const remaining: any[] = [];
+        for (const record of pending) {
+          try {
+            let res: ApiResponse<any>;
+            // Ejecutar el método correspondiente según el tipo
+            switch (type) {
+              case 'ventas':
+                res = await this.createVenta(record);
+                break;
+              case 'gastos':
+                res = await this.createGasto(record);
+                break;
+              case 'produccion':
+                res = await this.createRegistroDiario(record);
+                break;
+              case 'compras':
+                res = await this.createCompra(record);
+                break;
+              default:
+                res = { success: true }; // Tipo no manejado o genérico
+            }
+
+            if (res.success && !res.isNetworkError) {
+              totalSynced++;
+            } else {
+              remaining.push(record);
+              totalErrors++;
+            }
+          } catch (err) {
+            console.error(`Error sincronizando registro de ${type}:`, err);
+            remaining.push(record);
+            totalErrors++;
+          }
+        }
+
+        // Actualizar la lista de pendientes con los que fallaron
+        if (remaining.length > 0) {
+          await AsyncStorage.setItem(`pending_${type}`, JSON.stringify(remaining));
+        } else {
+          await AsyncStorage.removeItem(`pending_${type}`);
+        }
+      }
+
+      if (totalErrors > 0 && totalSynced === 0) {
+        return { success: false, error: 'No se pudo sincronizar ningún registro. Verifique su conexión.' };
+      }
+
+      return { success: true };
+    } catch (error: any) {
+      console.error('Error global en syncPendingData:', error);
+      return { success: false, error: error.message };
+    }
+  }
   
   getConnectionStatus() {
     return this.isOnline;

@@ -1,12 +1,8 @@
 import React, { createContext, useState, useContext, useEffect, ReactNode } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { TipoNegocio } from '../types/business';
+import apiService from '../services/api-service';
 
-export enum TipoNegocio {
-  PONEDORAS = 'PONEDORAS',
-  DESCARTE = 'DESCARTE',
-  VACAS = 'VACAS',
-  CERDOS = 'CERDOS'
-}
 
 interface BusinessContextData {
   tipoNegocio: TipoNegocio;

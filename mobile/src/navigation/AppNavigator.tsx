@@ -5,7 +5,8 @@ import { createDrawerNavigator } from '@react-navigation/drawer';
 import { ActivityIndicator, View, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../context/AuthContext';
-import { useBusiness, TipoNegocio } from '../context/BusinessContext';
+import { useBusiness } from '../context/BusinessContext';
+import { TipoNegocio } from '../types/business';
 import CustomDrawerContent from '../components/CustomDrawerContent';
 
 // Screens

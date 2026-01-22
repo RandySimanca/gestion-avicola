@@ -1,13 +1,13 @@
 import React, { useState } from 'react';
-import { 
-  View, 
-  Text, 
-  StyleSheet, 
-  TextInput, 
-  TouchableOpacity, 
-  ScrollView, 
-  Alert, 
-  ActivityIndicator 
+import {
+  View,
+  Text,
+  StyleSheet,
+  TextInput,
+  TouchableOpacity,
+  ScrollView,
+  Alert,
+  ActivityIndicator
 } from 'react-native';
 import LoteSelector from '../components/LoteSelector';
 import apiService from '../services/api-service';
@@ -68,6 +68,7 @@ export default function MortalidadScreen({ navigation }: any) {
         fecha: new Date().toISOString(),
         mortalidad_dia: mortalidadNum,
         alimento_consumido_kg: 0,
+        huevos_totales: 0,
         observaciones: observaciones.trim() || null
       };
 
@@ -82,7 +83,7 @@ export default function MortalidadScreen({ navigation }: any) {
       if (isOnline) {
         try {
           response = await apiService.createRegistroDiario(datos);
-          
+
           if (!response || !response.success) {
             if (response?.isNetworkError) {
               console.log('Error de red, guardando localmente...');
@@ -106,8 +107,8 @@ export default function MortalidadScreen({ navigation }: any) {
       if (isOfflineMode || (response && response.success)) {
         Alert.alert(
           isOfflineMode ? 'Guardado Local' : 'Éxito',
-          isOfflineMode 
-            ? 'Registro guardado localmente. Se sincronizará al recuperar conexión.' 
+          isOfflineMode
+            ? 'Registro guardado localmente. Se sincronizará al recuperar conexión.'
             : 'Registro de mortalidad guardado correctamente',
           [
             {
@@ -126,18 +127,19 @@ export default function MortalidadScreen({ navigation }: any) {
 
     } catch (error: any) {
       console.error('Error en handleSave:', error);
-      
+
       try {
         const datos = {
           lote_id: selectedLote!.id,
           fecha: new Date().toISOString(),
           mortalidad_dia: mortalidadNum,
           alimento_consumido_kg: 0,
+          huevos_totales: 0,
           observaciones: observaciones.trim() || null
         };
-        
+
         await apiService.savePendingRecord('registros_diario', datos);
-        
+
         Alert.alert(
           'Guardado Local',
           'No se pudo conectar con el servidor. El registro se guardó localmente y se sincronizará más tarde.',
@@ -270,6 +272,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#ddd',
     fontSize: 16,
+    color: '#2c3e50',
   },
   textArea: {
     height: 100,
